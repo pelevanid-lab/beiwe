@@ -191,13 +191,26 @@ export async function processClarityQuery(query: string, contextChips: string[] 
   };
 }
 
-export async function ingestMemory(content: string, category: string, provenance: any, type: string = 'fact', spaceType: string = 'personal', spaceId?: string) {
+export async function ingestMemory(
+  content: string, 
+  category: string, 
+  provenance: any, 
+  type: string = 'fact', 
+  spaceType: string = 'personal', 
+  spaceId?: string,
+  token?: string
+) {
   const apiUrl = process.env.NEXT_PUBLIC_SAULE_API_URL;
   if (!apiUrl) throw new Error("NEXT_PUBLIC_SAULE_API_URL is not defined");
 
+  const headers: any = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${apiUrl}/api/smi/ingest`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ content, category, type, spaceType, spaceId, provenance })
   });
   if (!response.ok) throw new Error("Failed to ingest memory");

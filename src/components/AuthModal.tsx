@@ -10,9 +10,10 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   dict: any;
+  forceLogin?: boolean;
 }
 
-export function AuthModal({ isOpen, onClose, dict }: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, dict, forceLogin = false }: AuthModalProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,6 +43,7 @@ export function AuthModal({ isOpen, onClose, dict }: AuthModalProps) {
     setError(null);
     try {
       const provider = new GoogleAuthProvider();
+      // Use popup since we will fix Electron's popup handling
       await signInWithPopup(auth, provider);
       onClose();
     } catch (err: any) {
@@ -161,13 +163,15 @@ export function AuthModal({ isOpen, onClose, dict }: AuthModalProps) {
             </form>
 
             {/* Skip Button */}
-            <button 
-              type="button"
-              onClick={onClose}
-              className="absolute top-4 right-4 text-[var(--color-ink)]/40 hover:text-[var(--color-ink)] p-2 text-xs font-bold transition-colors"
-            >
-              Geç
-            </button>
+            {!forceLogin && (
+              <button 
+                type="button"
+                onClick={onClose}
+                className="absolute top-4 right-4 text-[var(--color-ink)]/40 hover:text-[var(--color-ink)] p-2 text-xs font-bold transition-colors"
+              >
+                Geç
+              </button>
+            )}
           </motion.div>
         </motion.div>
       )}

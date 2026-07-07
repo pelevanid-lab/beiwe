@@ -41,11 +41,9 @@ export default async function LandingPage({
       {/* Hero */}
       <main className="flex-1 flex flex-col items-center justify-center text-center px-4 pt-12 pb-24 max-w-4xl mx-auto w-full space-y-12">
         
-        <HeroSearch placeholder="Herhangi bir şey arayın..." />
 
         <div className="space-y-6">
           <h1 className="font-serif text-6xl md:text-8xl font-bold tracking-tight leading-tight">
-            {dict.landing.title_part1} <br/>
             {dict.landing.title_part2}
             <span className="text-[var(--color-burnt-orange)]">{dict.landing.title_highlight}</span>
           </h1>
@@ -55,15 +53,19 @@ export default async function LandingPage({
           </p>
         </div>
 
-        <div className="flex flex-col items-center gap-4 w-full max-w-xs mx-auto">
-          <button className="w-full flex items-center justify-center gap-2 bg-[var(--color-burnt-orange)] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-md mx-auto">
+          <button className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[var(--color-burnt-orange)] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20">
             <Download size={20} />
             {dict.landing.btn_download}
           </button>
-          <span className="text-xs text-[var(--color-ink-light)] font-medium">
-            {dict.landing.windows_note}
-          </span>
+          
+          <Link href="/app" className="w-full sm:w-auto flex items-center justify-center gap-2 bg-transparent text-[var(--color-ink)] border-2 border-[var(--color-ink)]/10 px-8 py-4 rounded-full font-bold text-lg hover:bg-[var(--color-ink)]/5 transition-colors">
+            Web'de Başlat
+          </Link>
         </div>
+        <span className="text-xs text-[var(--color-ink-light)] font-medium block text-center mt-4">
+          {dict.landing.windows_note}
+        </span>
 
         {/* Feature grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-16 border-t border-[var(--color-ink)]/5 w-full mt-12">

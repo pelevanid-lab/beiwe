@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Mic, ArrowRight, Expand, Maximize2, ShieldCheck, Star } from 'lucide-react';
+import { Settings, LogOut, Search, Mic, ArrowRight, Bookmark, Globe, X, Maximize2, Minimize2, ShieldCheck, MonitorDown, Star } from 'lucide-react';
 import { ClarityResponse, ingestMemory, recallContext, getVerifiedSolutions } from '@/lib/saule-core-client';
 import { db } from '@/lib/firebase';
-import { collection, query as firestoreQuery, where, getDocs } from 'firebase/firestore';
+import { collection, query as firestoreQuery, where, getDocs, addDoc } from 'firebase/firestore';
 import { LogoIcon } from '@/components/Logo';
 
 import { AuthModal } from '@/components/AuthModal';
@@ -20,6 +20,7 @@ export default function AppClient({ dict }: { dict: any }) {
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<ClarityResponse | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const currentMemoryDocId = useRef<string | null>(null);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
@@ -27,14 +28,29 @@ export default function AppClient({ dict }: { dict: any }) {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [activeQuestion, setActiveQuestion] = useState<string | null>(null);
   const [questionAnswer, setQuestionAnswer] = useState<string>('');
-  const [workspaces, setWorkspaces] = useState<string[]>(['Kişisel', 'Ahmet Bey', 'Genel']);
+  const [workspaces, setWorkspaces] = useState<string[]>(['Kişisel', 'Takım Çalışması', 'Genel']);
   const [activeWorkspace, setActiveWorkspace] = useState<string>('Kişisel');
   const [showWebSearch, setShowWebSearch] = useState<boolean>(false);
+  const [allNodes, setAllNodes] = useState<any[]>([]);
+  const [activeIframeUrl, setActiveIframeUrl] = useState<string | null>(null);
+  const [isIframeFullscreen, setIsIframeFullscreen] = useState(false);
+  const [isIframeBlocked, setIsIframeBlocked] = useState(false);
   const hasAutoSearched = useRef(false);
+
+  // Customer Linking State
+  const [showCustomerSelectModal, setShowCustomerSelectModal] = useState(false);
+  const [pendingNoteText, setPendingNoteText] = useState('');
+  const [customersList, setCustomersList] = useState<any[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
+      setIsAuthLoading(false);
+      if (!u) {
+        setIsAuthModalOpen(true);
+      } else {
+        setIsAuthModalOpen(false);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -42,11 +58,55 @@ export default function AppClient({ dict }: { dict: any }) {
   // Read URL query parameter
   useEffect(() => {
     const q = searchParams.get('q');
+    if (!user) return;
+    
+    // Fetch all nodes for live search
+    const fetchNodes = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_SAULE_API_URL || 'https://us-central1-saule-core.cloudfunctions.net/api';
+        const res = await fetch(`${apiUrl}/api/smi/nodes`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.nodes) {
+          const userNodes = data.nodes.filter((n: any) => n.spaceId === user.uid);
+          setAllNodes(userNodes);
+          setCustomersList(userNodes.filter((n: any) => n.content.includes('/müşteri ')).sort((a: any, b: any) => b.createdAt - a.createdAt));
+        }
+      } catch (err) {
+        console.error("Failed to fetch nodes for live search", err);
+      }
+    };
+    fetchNodes();
+
     if (q && !hasAutoSearched.current) {
       setQuery(q);
       hasAutoSearched.current = true;
     }
-  }, [searchParams]);
+  }, [searchParams, user]);
+
+  // Check if Iframe URL is blocked by X-Frame-Options
+  useEffect(() => {
+    if (!activeIframeUrl) {
+      setIsIframeBlocked(false);
+      return;
+    }
+    const checkIframe = async () => {
+      // In Desktop app (Electron), framing is always allowed
+      const isElectron = typeof window !== 'undefined' && (window.navigator.userAgent.indexOf('Electron') > -1 || window.navigator.userAgent.indexOf('BeiweOS') > -1);
+      if (isElectron) {
+        setIsIframeBlocked(false);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/check-iframe?url=${encodeURIComponent(activeIframeUrl)}`);
+        const data = await res.json();
+        setIsIframeBlocked(data.blocked);
+      } catch {
+        setIsIframeBlocked(true);
+      }
+    };
+    checkIframe();
+  }, [activeIframeUrl]);
 
   // Auto-trigger search when query is loaded from URL
   useEffect(() => {
@@ -75,17 +135,79 @@ export default function AppClient({ dict }: { dict: any }) {
     let finalQuery = currentQuery;
     let finalType = 'query';
     let finalCategory = 'action';
+
+    // URL Algılama (Browser özelliği)
+    const isUrl = (str: string) => {
+      const pattern = new RegExp('^(https?:\\/\\/)?'+ // protocol
+        '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|'+ // domain name
+        '((\\d{1,3}\\.){3}\\d{1,3}))'+ // OR ip (v4) address
+        '(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ // port and path
+        '(\\?[;&a-z\\d%_.~+=-]*)?'+ // query string
+        '(\\#[-a-z\\d_]*)?$','i'); // fragment locator
+      return !!pattern.test(str.trim());
+    };
+
+    if (isUrl(finalQuery)) {
+       let url = finalQuery.trim();
+       if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          url = 'https://' + url;
+       }
+       setActiveIframeUrl(url);
+       setIsSearching(false);
+       setQuery('');
+       return;
+    }
     
     // Command Parsing
+    setActiveIframeUrl(null);
     if (finalQuery.startsWith('/müşteri ')) {
-       const newCustomer = finalQuery.replace('/müşteri ', '').trim();
-       if (!workspaces.includes(newCustomer)) {
-         setWorkspaces(prev => [...prev, newCustomer]);
-       }
-       setActiveWorkspace(newCustomer);
+       // Müşteri eklendiğinde workspace'i DEĞİŞTİRMİYORUZ. 
+       // Workspace (Çalışma alanı) sadece takım/kişisel ayrımı içindir.
        setQuery('');
+       setResults(null);
        setIsSearching(false);
        return; 
+    }
+    
+    if (finalQuery.startsWith('/yeni-musteri ')) {
+       if (!user) {
+         setIsAuthModalOpen(true);
+         setIsSearching(false);
+         return;
+       }
+       const customerName = finalQuery.replace('/yeni-musteri ', '').trim();
+       try {
+         const token = await user.getIdToken();
+         await ingestMemory(`/müşteri ${customerName}`, token, activeWorkspace);
+         setQuery('');
+         setIsSearching(false);
+         // Refresh customers list
+         const apiUrl = process.env.NEXT_PUBLIC_SAULE_API_URL || 'https://us-central1-saule-core.cloudfunctions.net/api';
+         const res = await fetch(`${apiUrl}/api/smi/nodes`);
+         if (res.ok) {
+           const data = await res.json();
+           const userNodes = data.nodes.filter((n: any) => n.spaceId === user.uid);
+           setAllNodes(userNodes);
+           setCustomersList(userNodes.filter((n: any) => n.content.includes('/müşteri ')).sort((a: any, b: any) => b.createdAt - a.createdAt));
+         }
+       } catch (err) {
+         console.error(err);
+       }
+       return;
+    }
+
+    if (finalQuery.startsWith('/musteriye-not ')) {
+       if (!user) {
+         setIsAuthModalOpen(true);
+         setIsSearching(false);
+         return;
+       }
+       const noteText = finalQuery.replace('/musteriye-not ', '').trim();
+       setPendingNoteText(noteText);
+       setShowCustomerSelectModal(true);
+       setQuery('');
+       setIsSearching(false);
+       return;
     }
     
     if (finalQuery.startsWith('/görev ')) {
@@ -168,14 +290,28 @@ export default function AppClient({ dict }: { dict: any }) {
         .then(data => {
           if (data.answer) setAiResponse(data.answer);
           if (data.clarificationQuestions || data.clarityScore !== undefined) {
-            setResults(prev => prev ? { 
-              ...prev, 
-              context: {
-                ...prev.context,
-                score: data.clarityScore !== undefined ? data.clarityScore : prev.context.score
-              },
-              clarificationChips: data.clarificationQuestions ? [...data.clarificationQuestions, "Eklemek istediğiniz başka bir detay var mı?"] : prev.clarificationChips 
-            } : prev);
+            setResults(prev => {
+              if (!prev) return prev;
+              const score = data.clarityScore !== undefined ? data.clarityScore : prev.context.score;
+              let questions = data.clarificationQuestions || [];
+              
+              if (score >= 80) {
+                 questions = [];
+              } else if (score >= 60) {
+                 questions = questions.slice(0, 1);
+              } else if (score >= 40) {
+                 questions = questions.slice(0, 2);
+              }
+              
+              return { 
+                ...prev, 
+                context: {
+                  ...prev.context,
+                  score
+                },
+                clarificationChips: [...questions, "Eklemek istediğiniz başka bir detay var mı?"] 
+              };
+            });
           }
           if (data.synthesizedContext) {
             setAiSynthesis(data.synthesizedContext);
@@ -183,19 +319,24 @@ export default function AppClient({ dict }: { dict: any }) {
 
           // If Clarity Score is high (>=80), the intent is very clear.
           // Delegate the semantic ingestion to the Saule SML core layer.
-          if (data.clarityScore && data.clarityScore >= 80 && user) {
+          if (data.clarityScore && data.clarityScore >= 80 && user && db) {
              const memoryContent = data.synthesizedContext 
                 ? `${finalQuery} - ${data.synthesizedContext}`
                 : finalQuery;
 
-             ingestMemory(
-               memoryContent, 
-               'knowledge', 
-               { source: 'search_bar', author: 'user', createdAt: Date.now() }, 
-               'fact', 
-               activeWorkspace, 
-               data.topic || 'default'
-             ).catch(err => console.error("Failed to ingest high clarity memory via SML", err));
+             // Direkt Firebase veritabanına kayıt yapmak yerine (Çünkü Saule Core kriptolu tutuyor)
+             // Mevcut ingestMemory çağrısına kullanıcının gerçek UID'sini author olarak gönderiyoruz.
+             user.getIdToken().then((token: string) => {
+               ingestMemory(
+                 memoryContent, 
+                 'knowledge', 
+                 { source: 'beiwe_os_auto', author: user.uid, createdAt: Date.now(), workspaceId: activeWorkspace }, 
+                 'fact', 
+                 'personal', 
+                 user.uid, // This is what getsaule.com filters by (n.spaceId === user.uid)
+                 token
+               ).catch(err => console.error("Failed to ingest high clarity memory via SML", err));
+             });
           }
 
           setIsGenerating(false);
@@ -275,6 +416,19 @@ export default function AppClient({ dict }: { dict: any }) {
     }
   };
 
+  const handleLinkNoteToCustomer = async (customerId: string, customerName: string) => {
+    if (!user || !pendingNoteText) return;
+    try {
+      const token = await user.getIdToken();
+      // Ingest memory with reference to the customer
+      await ingestMemory(`Müşteri: ${customerName}\n\nNot/Görüşme:\n${pendingNoteText}`, token, activeWorkspace);
+      setShowCustomerSelectModal(false);
+      setPendingNoteText('');
+    } catch (err) {
+      console.error("Failed to link note:", err);
+    }
+  };
+
   const handleRefinedSearch = async (e: React.FormEvent, question: string) => {
     e.preventDefault();
     if (!questionAnswer.trim()) return;
@@ -298,66 +452,35 @@ export default function AppClient({ dict }: { dict: any }) {
     await handleSearch(undefined, refinedQuery);
   };
 
-  return (
-    <div className="flex-1 w-full flex bg-[var(--color-paper)] h-screen overflow-hidden">
-      
-      {/* Workspace Sidebar (Dynamic Customers) */}
-      <div className="w-64 bg-white/50 border-r border-[var(--color-ink)]/10 flex flex-col shrink-0">
-        <div className="p-4 border-b border-[var(--color-ink)]/5">
-          <h3 className="font-serif font-bold text-[var(--color-ink)] mb-1">Çalışma Alanları</h3>
-          <p className="text-[10px] text-[var(--color-ink-light)]">Müşteri veya proje seçin</p>
-        </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {workspaces.map(ws => (
-            <button 
-              key={ws}
-              onClick={() => setActiveWorkspace(ws)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeWorkspace === ws 
-                  ? 'bg-[var(--color-burnt-orange)] text-white' 
-                  : 'text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5'
-              }`}
-            >
-              {ws}
-            </button>
-          ))}
-          <button 
-            onClick={() => setQuery('/müşteri ')}
-            className="w-full mt-2 text-left px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-burnt-orange)] hover:bg-[var(--color-burnt-orange)]/10 transition-colors flex items-center gap-2"
-          >
-            <span className="text-lg leading-none">+</span> Yeni Ekle
-          </button>
-        </div>
-      </div>
+  const getActionName = (q: string) => {
+    if (q.startsWith('/not ')) return 'Not Ekle';
+    if (q.startsWith('/görev ')) return 'Görev Ekle';
+    if (q.startsWith('/müşteri ')) return 'Müşteri Ekle';
+    if (q.startsWith('/fatura ')) return 'Fatura Ekle';
+    return 'Kaydet';
+  };
+  const isCommand = query.startsWith('/');
 
+  return (
+    <div className="flex-1 w-full flex flex-col bg-[var(--color-paper)] h-screen overflow-hidden">
+      
       {/* Main Column */}
-      <div className="flex-1 flex flex-col items-center overflow-y-auto px-8 relative">
+      <div className="flex-1 flex flex-col items-center overflow-y-auto px-4 md:px-8 relative pt-4">
         
-        {/* Mock Browser Tabs */}
-        <div className="w-full flex items-center gap-2 pt-4 pb-2 border-b border-[var(--color-ink)]/5 mb-4">
-           <button className="px-4 py-1.5 bg-white border border-[var(--color-ink)]/10 rounded-t-xl text-xs font-bold text-[var(--color-ink)] shadow-sm flex items-center gap-2">
-             <div className="w-2 h-2 rounded-full bg-[var(--color-burnt-orange)]"></div> Beiwe OS
-           </button>
-           <button className="px-4 py-1.5 bg-transparent text-xs font-medium text-[var(--color-ink-light)] hover:bg-black/5 rounded-t-xl transition-colors flex items-center gap-2">
-             <div className="w-3 h-3 rounded-full bg-green-500"></div> WhatsApp Web
-           </button>
-           <button className="px-4 py-1.5 bg-transparent text-xs font-medium text-[var(--color-ink-light)] hover:bg-black/5 rounded-t-xl transition-colors flex items-center gap-2">
-             <div className="w-3 h-3 rounded-full bg-pink-500"></div> Instagram
-           </button>
-        </div>
+
         <motion.div 
           initial={false}
           animate={{ 
-            marginTop: isSearching ? '2rem' : '30vh',
-            marginBottom: isSearching ? '2rem' : '0'
+            marginTop: (isSearching || activeIframeUrl) ? '1rem' : '10vh',
+            marginBottom: (isSearching || activeIframeUrl) ? '0' : '0'
           }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="w-full max-w-3xl flex flex-col items-center"
+          className={`w-full flex flex-col items-center transition-all duration-500 ${activeIframeUrl ? 'max-w-full px-4 h-full flex-1' : 'max-w-3xl'}`}
         >
           {/* Logo / Header */}
           <motion.div 
-            animate={{ scale: isSearching ? 0.8 : 1, opacity: isSearching ? 0 : 1 }}
-            className={`flex items-center gap-4 mb-8 ${isSearching ? 'h-0 overflow-hidden mb-0' : ''}`}
+            animate={{ scale: (isSearching || activeIframeUrl) ? 0.8 : 1, opacity: (isSearching || activeIframeUrl) ? 0 : 1 }}
+            className={`flex items-center gap-4 mb-8 ${(isSearching || activeIframeUrl) ? 'h-0 overflow-hidden mb-0' : ''}`}
           >
             <LogoIcon className="w-14 h-14 text-[var(--color-ink)]" />
             <div className="flex flex-col">
@@ -366,38 +489,142 @@ export default function AppClient({ dict }: { dict: any }) {
             </div>
           </motion.div>
 
-          {/* Search Header Title (Only visible in Initial State) */}
-          {!isSearching && (
-            <h2 className="font-serif text-4xl font-bold mb-8 text-[var(--color-burnt-orange)]">
-              {dict.what_needs_clarity}
-            </h2>
+          {/* Active Workspace Selector (Flow Integrated) */}
+          {(!isSearching && !activeIframeUrl) && (
+            <div className="flex flex-col items-center mb-8 relative group">
+              <span className="text-[10px] font-bold text-[var(--color-ink)]/40 tracking-widest uppercase mb-1">
+                Aktif Çalışma Alanı
+              </span>
+              <div className="flex items-center relative">
+                <select 
+                  value={activeWorkspace}
+                  onChange={(e) => {
+                    if (e.target.value === 'new') {
+                       setQuery('/müşteri ');
+                       const input = document.getElementById('main-search-input');
+                       if (input) input.focus();
+                    } else {
+                       setActiveWorkspace(e.target.value);
+                    }
+                  }}
+                  className="appearance-none font-serif text-4xl md:text-5xl font-bold text-[var(--color-burnt-orange)] bg-transparent outline-none cursor-pointer text-center pr-10"
+                >
+                  {workspaces.map(ws => <option key={ws} value={ws} className="text-lg">{ws}</option>)}
+                  <option value="new" className="text-lg">+ Yeni Ekle</option>
+                </select>
+                <div className="absolute right-0 pointer-events-none text-[var(--color-burnt-orange)] opacity-50">
+                  ▼
+                </div>
+              </div>
+            </div>
           )}
 
-          {/* Search Bar */}
-          <form onSubmit={handleSearch} className="w-full relative group">
-            <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
-              <Search className="text-[var(--color-ink)]/40" size={20} />
+          {/* Search Bar Container */}
+          <div className="w-full relative group">
+            <form onSubmit={handleSearch} className="w-full relative">
+              <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
+                <Search className="text-[var(--color-ink)]/40" size={20} />
+              </div>
+              <input 
+                id="main-search-input"
+                type="text" 
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={dict.search_placeholder}
+                className="w-full bg-white border border-[var(--color-ink)]/10 rounded-full py-4 pl-14 pr-24 text-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-burnt-orange)]/50 focus:border-[var(--color-burnt-orange)] shadow-sm transition-all text-[var(--color-ink)]"
+              />
+              <div className="absolute inset-y-0 right-2 flex items-center gap-2">
+                <button type="button" className="p-2 text-[var(--color-ink)]/40 hover:text-[var(--color-ink)] transition-colors">
+                  <Mic size={20} />
+                </button>
+                <button type="submit" className="bg-[var(--color-burnt-orange)] text-white p-2.5 rounded-full hover:bg-orange-600 transition-colors shadow-md">
+                  <ArrowRight size={20} />
+                </button>
+              </div>
+            </form>
+
+            {/* Live Search Suggestions for /not */}
+            {query.startsWith('/not ') && query.replace('/not ', '').trim().length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-[var(--color-ink)]/10 z-50 overflow-hidden max-h-60 overflow-y-auto">
+                {allNodes
+                  .filter(n => n.content.toLowerCase().includes(query.replace('/not ', '').trim().toLowerCase()))
+                  .map(n => (
+                    <div 
+                      key={n.id} 
+                      className="p-4 border-b border-[var(--color-ink)]/5 hover:bg-[var(--color-ink)]/5 cursor-pointer flex items-start gap-3 transition-colors"
+                      onClick={() => {
+                        setQuery(n.content);
+                        const input = document.getElementById('main-search-input');
+                        if (input) input.focus();
+                      }}
+                    >
+                      <Bookmark className="w-5 h-5 text-[var(--color-burnt-orange)] shrink-0 mt-0.5" />
+                      <p className="text-sm text-[var(--color-ink)] line-clamp-2">{n.content.replace(/^\/not\s+/i, '')}</p>
+                    </div>
+                  ))}
+                {allNodes.filter(n => n.content.toLowerCase().includes(query.replace('/not ', '').trim().toLowerCase())).length === 0 && (
+                  <div className="p-4 text-sm text-[var(--color-ink-light)] text-center">
+                    Böyle bir not bulunamadı, Enter'a basarak yeni kaydedebilirsiniz.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Internal Browser (Iframe) */}
+          {activeIframeUrl && (
+            <div className={
+              isIframeFullscreen 
+                ? "fixed inset-0 z-[100] bg-white flex flex-col" 
+                : "w-full mt-6 rounded-2xl overflow-hidden border border-[var(--color-ink)]/10 shadow-2xl relative flex-1 flex flex-col mb-4"
+            }>
+              <div className="bg-[var(--color-ink)]/5 h-12 flex items-center px-4 justify-between border-b border-[var(--color-ink)]/10 shrink-0">
+                <div className="flex items-center gap-3">
+                  <LogoIcon className="w-5 h-5 text-[var(--color-ink)]" />
+                  <span className="text-sm font-medium text-[var(--color-ink-light)] truncate max-w-sm">{activeIframeUrl}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setIsIframeFullscreen(!isIframeFullscreen)} className="p-2 hover:bg-[var(--color-ink)]/10 rounded-full transition-colors text-[var(--color-ink-light)] hover:text-[var(--color-ink)]">
+                    {isIframeFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                  </button>
+                  <button onClick={() => { setActiveIframeUrl(null); setIsIframeFullscreen(false); }} className="p-2 hover:bg-[var(--color-ink)]/10 rounded-full transition-colors text-[var(--color-ink-light)] hover:text-red-500">
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              
+              {isIframeBlocked ? (
+                <div className="w-full flex-1 bg-[var(--color-paper)] border-none flex flex-col items-center justify-center p-8 text-center">
+                  <div className="p-6 bg-[var(--color-burnt-orange)]/10 rounded-3xl text-[var(--color-burnt-orange)] mb-6">
+                    <ShieldCheck size={56} />
+                  </div>
+                  <h2 className="text-3xl font-bold text-[var(--color-ink)] tracking-tight mb-4">Tarayıcı Güvenliği</h2>
+                  <p className="text-[var(--color-ink-light)] text-lg max-w-xl leading-relaxed mb-8">
+                    Girdiğiniz web sitesi, güvenlik kısıtlamaları (X-Frame-Options) nedeniyle başka bir sayfa içerisinde açılmayı reddediyor.
+                    <br /><br />
+                    Beiwe browser'ı sorunsuz kullanmak ve <strong>Sağ Tık Menüsü</strong> gibi tüm OS avantajlarından yararlanmak için Masaüstü uygulamasını indirin.
+                  </p>
+                  <a 
+                    href="/tr/app/download" 
+                    className="px-8 py-4 bg-[var(--color-burnt-orange)] text-white rounded-2xl font-bold text-lg hover:bg-orange-600 transition-all shadow-xl hover:shadow-orange-500/20 hover:-translate-y-1 flex items-center gap-3"
+                  >
+                    <MonitorDown size={24} />
+                    Masaüstü Sürümünü İndir
+                  </a>
+                </div>
+              ) : (
+                <iframe 
+                  src={activeIframeUrl} 
+                  className="w-full flex-1 bg-white border-none"
+                  sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                />
+              )}
             </div>
-            <input 
-              type="text" 
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={dict.search_placeholder}
-              className="w-full bg-white border border-[var(--color-ink)]/10 rounded-full py-4 pl-14 pr-24 text-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-burnt-orange)]/50 focus:border-[var(--color-burnt-orange)] shadow-sm transition-all text-[var(--color-ink)]"
-            />
-            <div className="absolute inset-y-0 right-2 flex items-center gap-2">
-              <button type="button" className="p-2 text-[var(--color-ink)]/40 hover:text-[var(--color-ink)] transition-colors">
-                <Mic size={20} />
-              </button>
-              <button type="submit" className="bg-[var(--color-burnt-orange)] text-white p-2.5 rounded-full hover:bg-orange-600 transition-colors shadow-md">
-                <ArrowRight size={20} />
-              </button>
-            </div>
-          </form>
+          )}
 
           {/* Initial State Dashboard */}
-          {!isSearching && (
-            <div className="w-full mt-12 grid grid-cols-2 gap-8">
+          {!isSearching && !activeIframeUrl && (
+            <div className="w-full mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-[var(--color-ink-light)]">Bugünün Görevleri</h3>
                 <div className="flex flex-col gap-2">
@@ -416,18 +643,31 @@ export default function AppClient({ dict }: { dict: any }) {
                   <span onClick={() => setQuery('/görev ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)]">
                     /görev
                   </span>
-                  <span onClick={() => setQuery('/fatura ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)]">
-                    /fatura
+                  <span onClick={() => setQuery('/not ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors">
+                    /not
                   </span>
-                  <span onClick={() => setQuery('/müşteri ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)]">
+                  <span onClick={() => setQuery('/müşteri ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors">
                     /müşteri
+                  </span>
+                </div>
+
+                <h3 className="text-sm font-semibold text-[var(--color-ink-light)] mt-6">Kısa Yollar</h3>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-green-600 shadow-sm cursor-pointer hover:border-green-500 flex items-center gap-2 transition-colors">
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div> WhatsApp
+                  </span>
+                  <span className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-pink-600 shadow-sm cursor-pointer hover:border-pink-500 flex items-center gap-2 transition-colors">
+                    <div className="w-2 h-2 rounded-full bg-pink-500"></div> Instagram
+                  </span>
+                  <span className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-blue-600 shadow-sm cursor-pointer hover:border-blue-500 flex items-center gap-2 transition-colors">
+                    <div className="w-2 h-2 rounded-full bg-blue-500"></div> Outlook
                   </span>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-sm font-semibold text-[var(--color-ink-light)]">Aktif Müşteri Bağlamı ({activeWorkspace})</h3>
+                  <h3 className="text-sm font-semibold text-[var(--color-ink-light)]">Aktif Çalışma Alanı ({activeWorkspace})</h3>
                   <span className="text-xs text-[var(--color-burnt-orange)] font-medium cursor-pointer">{dict.view_all}</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
@@ -520,7 +760,9 @@ export default function AppClient({ dict }: { dict: any }) {
                 {/* Clarification Questions */}
                 {results.clarificationChips && results.clarificationChips.length > 0 && (
                   <div className="space-y-3">
-                    <span className="text-[10px] font-bold tracking-widest text-[var(--color-ink-light)]">NETLEŞTİRME SORULARI</span>
+                    <span className="text-[10px] font-bold tracking-widest text-[var(--color-ink-light)] uppercase">
+                      {results.context.score >= 80 ? 'HAZIR' : 'NETLEŞTİRME SORULARI'}
+                    </span>
                     <div className="flex flex-col gap-2">
                       {results.clarificationChips.map((chip, i) => (
                         <div key={i} className="flex flex-col gap-2">
@@ -572,6 +814,23 @@ export default function AppClient({ dict }: { dict: any }) {
                         </div>
                       ))}
                     </div>
+
+                    {/* Action Button if Score >= 80 */}
+                    {results.context.score >= 80 && isCommand && (
+                       <div className="mt-4 pt-4">
+                         <button 
+                           onClick={() => {
+                             // Sadece arayüzü sıfırlar, veri zaten skor 80'i geçtiğinde arka planda kaydedildi.
+                             setQuery('');
+                             setIsSearching(false);
+                             setResults(null);
+                           }}
+                           className="w-full py-3.5 bg-[var(--color-burnt-orange)] text-white text-sm font-bold rounded-xl shadow-md hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                         >
+                           {getActionName(query)} <ArrowRight size={16} />
+                         </button>
+                       </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -660,44 +919,7 @@ export default function AppClient({ dict }: { dict: any }) {
 
                 {/* Removed redundant AI block from bottom */}
 
-                {/* On-Demand Web Search Button */}
-                {!showWebSearch ? (
-                   <button 
-                     onClick={() => setShowWebSearch(true)}
-                     className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border-2 border-dashed border-[var(--color-ink)]/20 text-[var(--color-ink-light)] font-bold hover:bg-[var(--color-ink)]/5 hover:border-[var(--color-ink)]/40 transition-all mb-8"
-                   >
-                     🌐 Google'da Ara
-                   </button>
-                ) : (
-                  <>
-                    {/* 4. Web Results */}
-                    {results.webResults.length > 0 && (
-                      <section className="space-y-4">
-                        <div className="flex justify-between items-center mb-4">
-                          <div className="space-y-0.5">
-                            <h3 className="font-serif font-bold text-sm tracking-widest text-[var(--color-ink-light)]">{dict.web_results}</h3>
-                            <p className="text-xs text-[var(--color-ink)]/40">{dict.web_results_desc}</p>
-                          </div>
-                        </div>
-                        <div className="space-y-3">
-                          {results.webResults.map(item => (
-                             <div key={item.id} className="flex gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors cursor-pointer border border-transparent hover:border-[var(--color-ink)]/5">
-                               <div className="flex-1 space-y-1">
-                                 <h4 className="font-semibold text-sm text-[var(--color-ink)]">{item.title}</h4>
-                                 <span className="text-xs text-[var(--color-ink)]/40 block mb-2">{item.url}</span>
-                                 <p className="text-xs text-[var(--color-ink-light)] line-clamp-2">{item.description}</p>
-                               </div>
-                               <div className="w-20 h-20 bg-gray-200 rounded-lg shrink-0"></div>
-                             </div>
-                          ))}
-                        </div>
-                        <button className="w-full py-3 rounded-xl border border-[var(--color-ink)]/10 text-xs font-bold text-[var(--color-ink)] hover:bg-black/5 transition-colors">
-                          {dict.show_more}
-                        </button>
-                      </section>
-                    )}
-                  </>
-                )}
+
                 
               </div>
             </motion.div>
@@ -705,13 +927,63 @@ export default function AppClient({ dict }: { dict: any }) {
         </AnimatePresence>
       </div>
 
+      {/* Customer Select Modal for Linking Notes */}
+      <AnimatePresence>
+        {showCustomerSelectModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl flex flex-col max-h-[80vh]"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-[var(--color-ink)] font-serif tracking-tight">Müşteri Seçin</h2>
+                <button onClick={() => setShowCustomerSelectModal(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500">
+                  <X size={18} />
+                </button>
+              </div>
+              <p className="text-sm text-[var(--color-ink-light)] mb-4 bg-[var(--color-paper)] p-3 rounded-xl border border-[var(--color-ink)]/10 truncate">
+                Eklenecek not: <span className="font-medium italic">{pendingNoteText}</span>
+              </p>
+              
+              <div className="overflow-y-auto flex-1 space-y-2 -mx-2 px-2">
+                {customersList.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400 text-sm">
+                    Henüz kayıtlı müşteriniz yok.
+                  </div>
+                ) : (
+                  customersList.map(customer => {
+                    const match = customer.content.match(/\/müşteri\s+(.*)/);
+                    const name = match ? match[1] : 'İsimsiz Müşteri';
+                    return (
+                      <button 
+                        key={customer.id}
+                        onClick={() => handleLinkNoteToCustomer(customer.id, name)}
+                        className="w-full text-left px-4 py-3 rounded-xl hover:bg-[var(--color-burnt-orange)]/10 hover:text-[var(--color-burnt-orange)] transition-colors border border-transparent hover:border-[var(--color-burnt-orange)]/20 flex items-center gap-3"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-[var(--color-ink)]/5 flex items-center justify-center">
+                          <Globe size={14} className="opacity-50" />
+                        </div>
+                        <span className="font-semibold">{name}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
-
-      {/* Auth Modal for Frictionless-First Strategy */}
+      {/* Auth Modal - Forced if not logged in */}
       <AuthModal 
-        isOpen={isAuthModalOpen} 
-        onClose={() => setIsAuthModalOpen(false)} 
+        isOpen={isAuthModalOpen || (!isAuthLoading && !user)} 
+        onClose={() => {
+          if (user) setIsAuthModalOpen(false);
+        }} 
         dict={dict} 
+        forceLogin={!user}
       />
 
     </div>
