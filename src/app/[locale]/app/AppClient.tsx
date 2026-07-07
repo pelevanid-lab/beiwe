@@ -120,7 +120,7 @@ export default function AppClient({ dict }: { dict: any }) {
       }
 
       // 5. Filter local composition nodes using the same stricter logic
-      const validLocalNodes = composition.nodes.filter(n => {
+      const validLocalNodes = composition.nodes.filter((n: any) => {
         const content = (n.content || '').toLowerCase();
         return queryWords.length > 0 
           ? queryWords.some(w => content.includes(w))
@@ -205,7 +205,7 @@ export default function AppClient({ dict }: { dict: any }) {
         clarificationChips: [], // Initially empty, will be updated by Gemini
         collectiveResults: [],
         contextResults: structuredContextResults,
-        registeredProducts: verified.map(v => ({
+        registeredProducts: verified.map((v: any) => ({
           id: v.id,
           brand: v.brand,
           model: v.model,
