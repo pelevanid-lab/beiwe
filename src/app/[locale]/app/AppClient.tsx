@@ -29,6 +29,7 @@ export default function AppClient({ dict }: { dict: any }) {
   const [questionAnswer, setQuestionAnswer] = useState<string>('');
   const hasAutoSearched = useRef(false);
 
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
     });
