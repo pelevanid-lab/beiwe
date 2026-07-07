@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Bookmark, Users, Calendar, Link2, Settings, MonitorDown } from 'lucide-react';
+import { Home, Bookmark, Users, Calendar, Link2, Settings, MonitorDown, Briefcase, Inbox, FileText, History } from 'lucide-react';
 import { LogoIcon } from '@/components/Logo';
 import UserSidebarWidget from '@/components/UserSidebarWidget';
 import React, { useState } from 'react';
+import { WorkspaceModal } from '@/components/WorkspaceModal';
 
-const SidebarItem = ({ icon: Icon, label, href, active }: { icon: any, label: string, href: string, active: boolean }) => {
+const SidebarItem = ({ icon: Icon, label, href, active, onClick }: { icon: any, label: string, href?: string, active: boolean, onClick?: () => void }) => {
   const [showTooltip, setShowTooltip] = useState(false);
 
   return (
@@ -16,9 +17,15 @@ const SidebarItem = ({ icon: Icon, label, href, active }: { icon: any, label: st
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
-      <Link href={href} className={`transition-colors p-2 rounded-xl ${active ? 'text-[var(--color-burnt-orange)] bg-[var(--color-burnt-orange)]/10' : 'text-[var(--color-ink-light)] hover:text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5'}`}>
-        <Icon size={22} />
-      </Link>
+      {href ? (
+        <Link href={href} className={`transition-colors p-2 rounded-xl ${active ? 'text-[var(--color-burnt-orange)] bg-[var(--color-burnt-orange)]/10' : 'text-[var(--color-ink-light)] hover:text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5'}`}>
+          <Icon size={22} />
+        </Link>
+      ) : (
+        <button onClick={onClick} className={`transition-colors p-2 rounded-xl ${active ? 'text-[var(--color-burnt-orange)] bg-[var(--color-burnt-orange)]/10' : 'text-[var(--color-ink-light)] hover:text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5'}`}>
+          <Icon size={22} />
+        </button>
+      )}
       
       {showTooltip && (
         <div className="absolute left-full ml-3 px-3 py-1.5 bg-[var(--color-ink)] text-[var(--color-paper)] text-xs font-medium rounded shadow-xl whitespace-nowrap z-50 animate-in fade-in zoom-in-95 duration-200">
@@ -30,8 +37,9 @@ const SidebarItem = ({ icon: Icon, label, href, active }: { icon: any, label: st
   );
 };
 
-export default function Sidebar() {
+export default function Sidebar({ dict }: { dict?: any }) {
   const pathname = usePathname();
+  const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
 
   // Aktif kontrolü: pathname eşleşmesine bakıyoruz
   const isActive = (path: string) => {
@@ -54,19 +62,31 @@ export default function Sidebar() {
       </div>
       
       <nav className="flex-1 flex flex-col items-center gap-6 w-full">
-        <SidebarItem icon={Home} label="Ana Sayfa" href="/tr/app" active={isActive('/tr/app')} />
-        <SidebarItem icon={Bookmark} label="Notlar" href="/tr/app/notes" active={isActive('/notes')} />
-        <SidebarItem icon={Users} label="Müşteriler" href="/tr/app/customers" active={isActive('/customers')} />
-        <SidebarItem icon={Calendar} label="Randevular" href="/tr/app/appointments" active={isActive('/appointments')} />
+        <SidebarItem icon={Home} label={dict?.nav_home || "Ana Sayfa"} href="/tr/app" active={isActive('/tr/app')} />
+        <SidebarItem icon={Inbox} label={dict?.nav_inbox || "Gelen Kutusu"} href="/tr/app/inbox" active={isActive('/inbox')} />
+        <SidebarItem 
+          icon={Briefcase} 
+          label={dict?.nav_workspace || "İşletmeniz/Çalışma Alanınız"} 
+          active={isWorkspaceModalOpen} 
+          onClick={() => setIsWorkspaceModalOpen(true)} 
+        />
+
+        <SidebarItem icon={FileText} label={dict?.nav_docs || "Dokümanlar"} href="/tr/app/docs" active={isActive('/docs')} />
+        <SidebarItem icon={Users} label={dict?.nav_customers || "Müşteriler"} href="/tr/app/customers" active={isActive('/customers')} />
+        <SidebarItem icon={Calendar} label={dict?.nav_appointments || "Randevular"} href="/tr/app/appointments" active={isActive('/appointments')} />
         <div className="w-8 h-px bg-[var(--color-ink)]/10 my-2" />
-        <SidebarItem icon={Link2} label="Entegrasyonlar" href="/tr/app/integrations" active={isActive('/integrations')} />
-        <SidebarItem icon={MonitorDown} label="Uygulamayı İndir" href="/tr/app/download" active={isActive('/download')} />
+        <SidebarItem icon={Link2} label={dict?.nav_integrations || "Entegrasyonlar"} href="/tr/app/integrations" active={isActive('/integrations')} />
+        <SidebarItem icon={MonitorDown} label={dict?.nav_download || "Uygulamayı İndir"} href="/tr/app/download" active={isActive('/download')} />
       </nav>
 
       <div className="flex flex-col items-center gap-6 w-full mt-auto">
-        <SidebarItem icon={Settings} label="Ayarlar" href="#" active={false} />
+        <SidebarItem icon={Bookmark} label={dict?.nav_clarity_notes || "Netleştirici Notlar"} href="/tr/app/notes" active={isActive('/notes')} />
+
+        <SidebarItem icon={Settings} label={dict?.nav_settings || "Ayarlar"} href="#" active={false} />
         <UserSidebarWidget />
       </div>
+
+      <WorkspaceModal isOpen={isWorkspaceModalOpen} onClose={() => setIsWorkspaceModalOpen(false)} />
     </aside>
   );
 }

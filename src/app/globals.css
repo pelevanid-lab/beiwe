@@ -22,3 +22,21 @@
     font-family: var(--font-outfit), sans-serif;
   }
 }
+
+/* Quill Editor Overrides */
+.ql-container {
+  font-family: inherit !important;
+  font-size: 1rem !important;
+  border-bottom-left-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+  border-color: rgba(23, 23, 23, 0.1) !important;
+}
+.ql-editor {
+  min-height: 300px;
+}
+.ql-toolbar.ql-snow {
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+  border-color: rgba(23, 23, 23, 0.1) !important;
+  background-color: var(--color-paper);
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, LogOut, Search, Mic, ArrowRight, Bookmark, Globe, X, Maximize2, Minimize2, ShieldCheck, MonitorDown, Star } from 'lucide-react';
 import { ClarityResponse, ingestMemory, recallContext, getVerifiedSolutions } from '@/lib/saule-core-client';
@@ -12,8 +12,10 @@ import { LogoIcon } from '@/components/Logo';
 import { AuthModal } from '@/components/AuthModal';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { fetchWithGoogleAuth } from '@/lib/google-api';
 
 export default function AppClient({ dict }: { dict: any }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const [query, setQuery] = useState('');
@@ -28,6 +30,7 @@ export default function AppClient({ dict }: { dict: any }) {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [activeQuestion, setActiveQuestion] = useState<string | null>(null);
   const [questionAnswer, setQuestionAnswer] = useState<string>('');
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<string[]>(['Kişisel', 'Takım Çalışması', 'Genel']);
   const [activeWorkspace, setActiveWorkspace] = useState<string>('Kişisel');
   const [showWebSearch, setShowWebSearch] = useState<boolean>(false);
@@ -58,6 +61,7 @@ export default function AppClient({ dict }: { dict: any }) {
   // Read URL query parameter
   useEffect(() => {
     const q = searchParams.get('q');
+    const queryParam = searchParams.get('query');
     if (!user) return;
     
     // Fetch all nodes for live search
@@ -70,7 +74,7 @@ export default function AppClient({ dict }: { dict: any }) {
         if (data.nodes) {
           const userNodes = data.nodes.filter((n: any) => n.spaceId === user.uid);
           setAllNodes(userNodes);
-          setCustomersList(userNodes.filter((n: any) => n.content.includes('/müşteri ')).sort((a: any, b: any) => b.createdAt - a.createdAt));
+          setCustomersList(userNodes.filter((n: any) => n.content.includes('/customer ') || n.content.includes('/müşteri ')).sort((a: any, b: any) => b.createdAt - a.createdAt));
         }
       } catch (err) {
         console.error("Failed to fetch nodes for live search", err);
@@ -78,7 +82,13 @@ export default function AppClient({ dict }: { dict: any }) {
     };
     fetchNodes();
 
-    if (q && !hasAutoSearched.current) {
+    if (queryParam) {
+      setQuery(queryParam);
+      setTimeout(() => {
+        handleSearch(undefined, queryParam);
+      }, 500);
+      router.replace('/tr/app');
+    } else if (q && !hasAutoSearched.current) {
       setQuery(q);
       hasAutoSearched.current = true;
     }
@@ -118,6 +128,15 @@ export default function AppClient({ dict }: { dict: any }) {
       return () => clearTimeout(timer);
     }
   }, [query, isSearching, results]);
+
+  // History paneli toggle dinleyicisi
+  useEffect(() => {
+    const handleToggleHistory = () => {
+      setIsHistoryOpen(prev => !prev);
+    };
+    window.addEventListener('toggleHistoryPanel', handleToggleHistory);
+    return () => window.removeEventListener('toggleHistoryPanel', handleToggleHistory);
+  }, []);
 
   const handleSearch = async (e?: React.FormEvent, overrideQuery?: string) => {
     if (e) {
@@ -160,7 +179,7 @@ export default function AppClient({ dict }: { dict: any }) {
     
     // Command Parsing
     setActiveIframeUrl(null);
-    if (finalQuery.startsWith('/müşteri ')) {
+    if (finalQuery.startsWith('/customer ')) {
        // Müşteri eklendiğinde workspace'i DEĞİŞTİRMİYORUZ. 
        // Workspace (Çalışma alanı) sadece takım/kişisel ayrımı içindir.
        setQuery('');
@@ -169,16 +188,24 @@ export default function AppClient({ dict }: { dict: any }) {
        return; 
     }
     
-    if (finalQuery.startsWith('/yeni-musteri ')) {
+    if (finalQuery.startsWith('/new-customer ')) {
        if (!user) {
          setIsAuthModalOpen(true);
          setIsSearching(false);
          return;
        }
-       const customerName = finalQuery.replace('/yeni-musteri ', '').trim();
+       const customerName = finalQuery.replace('/new-customer ', '').trim();
        try {
          const token = await user.getIdToken();
-         await ingestMemory(`/müşteri ${customerName}`, token, activeWorkspace);
+         await ingestMemory(
+           `/customer ${customerName}`,
+           'action',
+           { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
+           'fact',
+           'personal',
+           user.uid,
+           token
+         );
          setQuery('');
          setIsSearching(false);
          // Refresh customers list
@@ -188,7 +215,7 @@ export default function AppClient({ dict }: { dict: any }) {
            const data = await res.json();
            const userNodes = data.nodes.filter((n: any) => n.spaceId === user.uid);
            setAllNodes(userNodes);
-           setCustomersList(userNodes.filter((n: any) => n.content.includes('/müşteri ')).sort((a: any, b: any) => b.createdAt - a.createdAt));
+           setCustomersList(userNodes.filter((n: any) => n.content.includes('/customer ') || n.content.includes('/müşteri ')).sort((a: any, b: any) => b.createdAt - a.createdAt));
          }
        } catch (err) {
          console.error(err);
@@ -196,13 +223,13 @@ export default function AppClient({ dict }: { dict: any }) {
        return;
     }
 
-    if (finalQuery.startsWith('/musteriye-not ')) {
+    if (finalQuery.startsWith('/customer-note ')) {
        if (!user) {
          setIsAuthModalOpen(true);
          setIsSearching(false);
          return;
        }
-       const noteText = finalQuery.replace('/musteriye-not ', '').trim();
+       const noteText = finalQuery.replace('/customer-note ', '').trim();
        setPendingNoteText(noteText);
        setShowCustomerSelectModal(true);
        setQuery('');
@@ -210,10 +237,10 @@ export default function AppClient({ dict }: { dict: any }) {
        return;
     }
     
-    if (finalQuery.startsWith('/görev ')) {
+    if (finalQuery.startsWith('/task ')) {
        finalType = 'task';
        finalCategory = 'action';
-       finalQuery = finalQuery.replace('/görev ', '').trim();
+       finalQuery = finalQuery.replace('/task ', '').trim();
     }
 
     try {
@@ -227,7 +254,23 @@ export default function AppClient({ dict }: { dict: any }) {
       );
 
       // 2. Core Recall (Get context)
-      const composition = await recallContext(finalQuery, 'default', activeWorkspace);
+      let composition = await recallContext(finalQuery, 'default', activeWorkspace);
+
+      // FALLBACK: If embedding/semantic search fails or returns empty, fetch all nodes and let local filtering handle it
+      if (!composition.nodes || composition.nodes.length === 0) {
+        try {
+          const apiUrl = process.env.NEXT_PUBLIC_SAULE_API_URL || 'https://us-central1-saule-core.cloudfunctions.net/api';
+          const nodesRes = await fetch(`${apiUrl}/api/smi/nodes`);
+          if (nodesRes.ok) {
+            const nodesData = await nodesRes.json();
+            if (user) {
+              composition.nodes = (nodesData.nodes || []).filter((n: any) => n.spaceId === user.uid);
+            }
+          }
+        } catch (e) {
+          console.error("Fallback nodes fetch error", e);
+        }
+      }
 
       // 3. Get Verified Solutions
       const verified = await getVerifiedSolutions(composition);
@@ -285,7 +328,19 @@ export default function AppClient({ dict }: { dict: any }) {
       fetch('/api/gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: currentQuery, context: combinedNodes.map(n => n.content).join('\n') })
+        body: JSON.stringify({ 
+          query: currentQuery, 
+          context: combinedNodes.map(n => {
+            const text = n.content || '';
+            if (text.startsWith('/customer')) return `[KAYITLI MÜŞTERİ]: ${text.replace(/^\/customer/i, '').trim()}`;
+            if (text.startsWith('/appointment')) return `[KAYITLI RANDEVU]: ${text.replace(/^\/appointment/i, '').trim()}`;
+            if (text.startsWith('/note')) return `[KAYITLI NOT]: ${text.replace(/^\/note/i, '').trim()}`;
+            return text;
+          }).join('\n'),
+          pendingAction: results?.actionProposal || null,
+          localTime: new Date().toLocaleString('tr-TR', { timeZoneName: 'short' }),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        })
       }).then(res => res.json())
         .then(data => {
           if (data.answer) setAiResponse(data.answer);
@@ -295,16 +350,9 @@ export default function AppClient({ dict }: { dict: any }) {
               const score = data.clarityScore !== undefined ? data.clarityScore : prev.context.score;
               let questions = data.clarificationQuestions || [];
               
-              if (score >= 80) {
-                 questions = [];
-              } else if (score >= 60) {
-                 questions = questions.slice(0, 1);
-              } else if (score >= 40) {
-                 questions = questions.slice(0, 2);
-              }
-              
               return { 
                 ...prev, 
+                actionProposal: data.actionProposal || null,
                 context: {
                   ...prev.context,
                   score
@@ -312,6 +360,12 @@ export default function AppClient({ dict }: { dict: any }) {
                 clarificationChips: [...questions, "Eklemek istediğiniz başka bir detay var mı?"] 
               };
             });
+          } else if (data.actionProposal) {
+             setResults(prev => prev ? { ...prev, actionProposal: data.actionProposal } : prev);
+          }
+
+          if (data.actionProposal?.isApproved) {
+            handleExecuteAction(data.actionProposal);
           }
           if (data.synthesizedContext) {
             setAiSynthesis(data.synthesizedContext);
@@ -321,8 +375,8 @@ export default function AppClient({ dict }: { dict: any }) {
           // Delegate the semantic ingestion to the Saule SML core layer.
           if (data.clarityScore && data.clarityScore >= 80 && user && db) {
              const memoryContent = data.synthesizedContext 
-                ? `${finalQuery} - ${data.synthesizedContext}`
-                : finalQuery;
+                ? `[ORIGINAL_QUERY] ${finalQuery}\n[SYNTHESIS] ${data.synthesizedContext}`
+                : `[ORIGINAL_QUERY] ${finalQuery}`;
 
              // Direkt Firebase veritabanına kayıt yapmak yerine (Çünkü Saule Core kriptolu tutuyor)
              // Mevcut ingestMemory çağrısına kullanıcının gerçek UID'sini author olarak gönderiyoruz.
@@ -452,18 +506,277 @@ export default function AppClient({ dict }: { dict: any }) {
     await handleSearch(undefined, refinedQuery);
   };
 
+  const handleExecuteAction = async (overrideProposal?: any) => {
+    const actionProposal = overrideProposal || results?.actionProposal;
+    const currentQuery = query || "Manuel Onay";
+    if (!user || !actionProposal) return;
+    try {
+      const token = await user.getIdToken();
+      
+      // Update UI to show loading on button
+      setResults(prev => prev ? { 
+        ...prev, 
+        actionProposal: { ...prev.actionProposal!, buttonText: dict?.processing || "İşleniyor..." } 
+      } : prev);
+
+      if (actionProposal.type === 'create_customer') {
+        let actionResultText = dict?.success_customer_added || "Müşteri başarıyla eklendi.";
+        await ingestMemory(
+          `/customer ${actionProposal.payload.name}`,
+          'action',
+          { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
+          'fact',
+          'personal',
+          user.uid,
+          token
+        );
+        
+        await ingestMemory(
+          `[ORIGINAL_QUERY] ${currentQuery}\n[SYNTHESIS] Müşteri veritabanında işlem yapıldı.\n[ACTION_RESULT] ${actionResultText}`,
+          'knowledge',
+          { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
+          'fact',
+          'personal',
+          user.uid,
+          token
+        );
+      } else if (actionProposal.type === 'create_appointment' || actionProposal.type === 'multi_step_plan' || actionProposal.type === 'update_appointment') {
+        let finalContent = `/appointment ${actionProposal.payload.customer} - Konu: ${actionProposal.payload.title}`;
+        finalContent += ` - Zaman: ${new Date(actionProposal.payload.start).toISOString()}`;
+        
+        let actionResultText = dict?.success_appointment_created ? `${dict.success_appointment_created}` : `Randevu atandı.`;
+        if (actionProposal.type === 'update_appointment') {
+          actionResultText = "Randevu başarıyla güncellendi.";
+        }
+        let googleMeetLink = "";
+
+        // Google Sync if connected
+        const googleToken = localStorage.getItem('google_access_token');
+        if (googleToken) {
+          try {
+            const googleRes = await fetchWithGoogleAuth('/api/calendar/events', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token: googleToken,
+                appointment: {
+                  title: actionProposal.payload.title,
+                  customer: actionProposal.payload.customer,
+                  start: actionProposal.payload.start,
+                  end: new Date(new Date(actionProposal.payload.start).getTime() + 60*60*1000).toISOString(),
+                  recurrence: 'none',
+                  createMeet: actionProposal.payload.createMeet || false,
+                  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                }
+              })
+            });
+            const googleData = await googleRes.json();
+            if (googleData.success && googleData.hangoutLink) {
+               finalContent += ` - Meet: ${googleData.hangoutLink}`;
+            }
+          } catch (err) {
+            console.error("Google Sync Error:", err);
+          }
+
+          // Eğer güncelleme ise eski Google takvim etkinliğini sil
+          if (actionProposal.type === 'update_appointment' && actionProposal.payload.oldStart) {
+            try {
+              await fetch('/api/calendar/events', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  token: googleToken,
+                  title: actionProposal.payload.customer && actionProposal.payload.customer !== 'Bilinmeyen Müşteri' 
+                         ? `${actionProposal.payload.customer} - ${actionProposal.payload.title}`
+                         : actionProposal.payload.title || 'Beiwe Randevusu',
+                  start: new Date(actionProposal.payload.oldStart).toISOString()
+                })
+              });
+            } catch (err) {
+              console.error("Google Calendar Delete Error:", err);
+            }
+          }
+        }
+        
+        if (actionProposal.type === 'update_appointment' && actionProposal.payload.oldStart) {
+          await ingestMemory(
+            `/cancel_appointment ${actionProposal.payload.customer} - Zaman: ${new Date(actionProposal.payload.oldStart).toISOString()}`,
+            'action',
+            { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
+            'task',
+            'personal',
+            user.uid,
+            token
+          );
+        }
+
+        await ingestMemory(
+          finalContent,
+          'action',
+          { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
+          'task',
+          'personal',
+          user.uid,
+          token
+        );
+        
+        // Yeni müşteri ise arka planda sessizce ekle
+        if (!customersList.includes(actionProposal.payload.customer)) {
+          await ingestMemory(
+            `/customer ${actionProposal.payload.customer}`,
+            'action',
+            { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
+            'fact',
+            'personal',
+            user.uid,
+            token
+          );
+        }
+
+        // Asistan arama hafızasına yaz (Clarity Notes'da görünsün diye)
+        await ingestMemory(
+          `[ORIGINAL_QUERY] ${currentQuery}\n[SYNTHESIS] İşlem gerçekleştirildi.\n[ACTION_RESULT] ${actionResultText}`,
+          'knowledge',
+          { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
+          'fact',
+          'personal',
+          user.uid,
+          token
+        );
+      } else if (actionProposal.type === 'delete_appointment') {
+        const googleToken = localStorage.getItem('google_access_token');
+        if (googleToken && actionProposal.payload.oldStart) {
+          try {
+            await fetch('/api/calendar/events', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token: googleToken,
+                title: actionProposal.payload.customer && actionProposal.payload.customer !== 'Bilinmeyen Müşteri' 
+                       ? `${actionProposal.payload.customer} - ${actionProposal.payload.title}`
+                       : actionProposal.payload.title || 'Beiwe Randevusu',
+                start: new Date(actionProposal.payload.oldStart).toISOString()
+              })
+            });
+          } catch (err) {
+            console.error("Google Calendar Delete Error:", err);
+          }
+        }
+        
+        if (actionProposal.payload.oldStart) {
+          await ingestMemory(
+            `/cancel_appointment ${actionProposal.payload.customer} - Zaman: ${new Date(actionProposal.payload.oldStart).toISOString()}`,
+            'action',
+            { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
+            'task',
+            'personal',
+            user.uid,
+            token
+          );
+        }
+        
+        await ingestMemory(
+          `[ORIGINAL_QUERY] ${currentQuery}\n[SYNTHESIS] İşlem gerçekleştirildi.\n[ACTION_RESULT] Randevu başarıyla iptal edildi.`,
+          'knowledge',
+          { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
+          'fact',
+          'personal',
+          user.uid,
+          token
+        );
+      }
+      
+      // Update Results to show success
+      setResults(prev => prev ? { 
+        ...prev, 
+        actionProposal: { 
+          ...prev.actionProposal!, 
+          buttonText: "✅ İşlem Başarıyla Tamamlandı" 
+        } 
+      } : prev);
+      
+      // Refresh context slightly
+      setTimeout(() => {
+        setResults(prev => prev ? { ...prev, actionProposal: undefined } : prev);
+        
+        // Asistanın cevabını işlem sonucuyla güncelle
+        let successMessage = "✅ Harika! İşlemleri başarıyla tamamladım:\n";
+        if (actionProposal.type === 'create_customer') {
+          successMessage += `- ${actionProposal.payload.name} isimli müşteri kaydedildi.`;
+        } else if (actionProposal.type === 'create_appointment' || actionProposal.type === 'multi_step_plan') {
+          successMessage += `- ${actionProposal.payload.customer} isimli müşteri kaydedildi.\n`;
+          successMessage += `- ${new Date(actionProposal.payload.start).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} tarihi için randevu oluşturuldu.`;
+          if (actionProposal.payload.createMeet) {
+            successMessage += `\n- Google Meet etkinliği eklendi ve takvimle senkronize edildi.`;
+          }
+        } else if (actionProposal.type === 'delete_appointment') {
+          successMessage += `- ${actionProposal.payload.customer} isimli müşterinin randevusu iptal edildi.`;
+        }
+        setAiResponse(successMessage);
+        
+        setQuery('');
+      }, 2500);
+      
+    } catch (err) {
+      console.error("Execute action error", err);
+      setResults(prev => prev ? { 
+        ...prev, 
+        actionProposal: { ...prev.actionProposal!, buttonText: "❌ Hata Oluştu" } 
+      } : prev);
+    }
+  };
+
   const getActionName = (q: string) => {
-    if (q.startsWith('/not ')) return 'Not Ekle';
-    if (q.startsWith('/görev ')) return 'Görev Ekle';
-    if (q.startsWith('/müşteri ')) return 'Müşteri Ekle';
+    if (q.startsWith('/note ')) return 'Not Ekle';
+    if (q.startsWith('/task ')) return 'Görev Ekle';
+    if (q.startsWith('/customer ')) return 'Müşteri Ekle';
     if (q.startsWith('/fatura ')) return 'Fatura Ekle';
     return 'Kaydet';
   };
   const isCommand = query.startsWith('/');
 
   return (
-    <div className="flex-1 w-full flex flex-col bg-[var(--color-paper)] h-screen overflow-hidden">
+    <div className="flex-1 w-full flex bg-[var(--color-paper)] h-screen overflow-hidden">
       
+      {/* Left Sidebar for History (Transactions) */}
+      <AnimatePresence>
+        {!activeIframeUrl && isHistoryOpen && (
+          <motion.div 
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 320, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="bg-white border-r border-[var(--color-ink)]/10 h-full flex flex-col shrink-0 z-10 shadow-sm overflow-hidden"
+          >
+            <div className="p-6 border-b border-[var(--color-ink)]/5 shrink-0 bg-[var(--color-paper)]/50 flex items-center justify-between">
+              <h2 className="text-xs font-bold text-[var(--color-ink-light)] tracking-widest uppercase">İşlem Geçmişi</h2>
+              <button onClick={() => setIsHistoryOpen(false)} className="p-1 hover:bg-[var(--color-ink)]/5 rounded-md text-[var(--color-ink)]/40 hover:text-[var(--color-ink)]">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 w-80">
+              {allNodes.slice(0, 30).map(node => (
+                <div 
+                  key={node.id} 
+                  className="p-4 bg-[var(--color-ink)]/5 rounded-2xl text-sm text-[var(--color-ink)] hover:bg-[var(--color-ink)]/10 cursor-pointer transition-colors border border-transparent hover:border-[var(--color-ink)]/10 group"
+                  onClick={() => { setQuery(node.content); setIsHistoryOpen(false); }}
+                >
+                  <div className="font-semibold line-clamp-2 leading-snug">{node.content}</div>
+                  <div className="text-[10px] text-[var(--color-ink)]/40 mt-3 font-bold uppercase tracking-wider">
+                    {new Date(node.createdAt).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              ))}
+              {allNodes.length === 0 && (
+                <div className="text-sm font-medium text-[var(--color-ink)]/40 text-center mt-10">
+                  Henüz kayıt yok.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Main Column */}
       <div className="flex-1 flex flex-col items-center overflow-y-auto px-4 md:px-8 relative pt-4">
         
@@ -489,35 +802,7 @@ export default function AppClient({ dict }: { dict: any }) {
             </div>
           </motion.div>
 
-          {/* Active Workspace Selector (Flow Integrated) */}
-          {(!isSearching && !activeIframeUrl) && (
-            <div className="flex flex-col items-center mb-8 relative group">
-              <span className="text-[10px] font-bold text-[var(--color-ink)]/40 tracking-widest uppercase mb-1">
-                Aktif Çalışma Alanı
-              </span>
-              <div className="flex items-center relative">
-                <select 
-                  value={activeWorkspace}
-                  onChange={(e) => {
-                    if (e.target.value === 'new') {
-                       setQuery('/müşteri ');
-                       const input = document.getElementById('main-search-input');
-                       if (input) input.focus();
-                    } else {
-                       setActiveWorkspace(e.target.value);
-                    }
-                  }}
-                  className="appearance-none font-serif text-4xl md:text-5xl font-bold text-[var(--color-burnt-orange)] bg-transparent outline-none cursor-pointer text-center pr-10"
-                >
-                  {workspaces.map(ws => <option key={ws} value={ws} className="text-lg">{ws}</option>)}
-                  <option value="new" className="text-lg">+ Yeni Ekle</option>
-                </select>
-                <div className="absolute right-0 pointer-events-none text-[var(--color-burnt-orange)] opacity-50">
-                  ▼
-                </div>
-              </div>
-            </div>
-          )}
+
 
           {/* Search Bar Container */}
           <div className="w-full relative group">
@@ -543,11 +828,11 @@ export default function AppClient({ dict }: { dict: any }) {
               </div>
             </form>
 
-            {/* Live Search Suggestions for /not */}
-            {query.startsWith('/not ') && query.replace('/not ', '').trim().length > 0 && (
+            {/* Live Search Suggestions for /note */}
+            {query.startsWith('/note ') && query.replace('/note ', '').trim().length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-[var(--color-ink)]/10 z-50 overflow-hidden max-h-60 overflow-y-auto">
                 {allNodes
-                  .filter(n => n.content.toLowerCase().includes(query.replace('/not ', '').trim().toLowerCase()))
+                  .filter(n => n.content.toLowerCase().includes(query.replace('/note ', '').trim().toLowerCase()))
                   .map(n => (
                     <div 
                       key={n.id} 
@@ -559,16 +844,25 @@ export default function AppClient({ dict }: { dict: any }) {
                       }}
                     >
                       <Bookmark className="w-5 h-5 text-[var(--color-burnt-orange)] shrink-0 mt-0.5" />
-                      <p className="text-sm text-[var(--color-ink)] line-clamp-2">{n.content.replace(/^\/not\s+/i, '')}</p>
+                      <p className="text-sm text-[var(--color-ink)] line-clamp-2">{n.content.replace(/^\/note\s+/i, '')}</p>
                     </div>
                   ))}
-                {allNodes.filter(n => n.content.toLowerCase().includes(query.replace('/not ', '').trim().toLowerCase())).length === 0 && (
+                {allNodes.filter(n => n.content.toLowerCase().includes(query.replace('/note ', '').trim().toLowerCase())).length === 0 && (
                   <div className="p-4 text-sm text-[var(--color-ink-light)] text-center">
                     Böyle bir not bulunamadı, Enter'a basarak yeni kaydedebilirsiniz.
                   </div>
                 )}
               </div>
             )}
+          </div>
+
+          {/* Quick Commands below search bar */}
+          <div className={`w-full flex flex-wrap justify-center gap-2 mt-4 transition-all duration-300 ${isSearching || activeIframeUrl ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'}`}>
+             <span onClick={() => setQuery('/new-customer ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-xs font-bold tracking-wide text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors">/new-customer</span>
+             <span onClick={() => setQuery('/customer ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-xs font-bold tracking-wide text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors">/customer</span>
+             <span onClick={() => setQuery('/appointment ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-xs font-bold tracking-wide text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors">/appointment</span>
+             <span onClick={() => setQuery('/task ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-xs font-bold tracking-wide text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors">/task</span>
+             <span onClick={() => setQuery('/note ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-xs font-bold tracking-wide text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors">/note</span>
           </div>
 
           {/* Internal Browser (Iframe) */}
@@ -619,70 +913,6 @@ export default function AppClient({ dict }: { dict: any }) {
                   sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
                 />
               )}
-            </div>
-          )}
-
-          {/* Initial State Dashboard */}
-          {!isSearching && !activeIframeUrl && (
-            <div className="w-full mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-[var(--color-ink-light)]">Bugünün Görevleri</h3>
-                <div className="flex flex-col gap-2">
-                  <div className="bg-white p-3 rounded-xl border border-[var(--color-ink)]/5 shadow-sm flex items-center gap-3">
-                    <input type="checkbox" className="w-4 h-4 text-[var(--color-burnt-orange)] rounded border-gray-300 focus:ring-[var(--color-burnt-orange)]" />
-                    <span className="text-sm font-medium">Ahmet Bey'e teklif hazırla</span>
-                  </div>
-                  <div className="bg-white p-3 rounded-xl border border-[var(--color-ink)]/5 shadow-sm flex items-center gap-3">
-                    <input type="checkbox" className="w-4 h-4 text-[var(--color-burnt-orange)] rounded border-gray-300 focus:ring-[var(--color-burnt-orange)]" />
-                    <span className="text-sm font-medium">Ofis kirasını yatır</span>
-                  </div>
-                </div>
-                
-                <h3 className="text-sm font-semibold text-[var(--color-ink-light)] mt-6">Hızlı Komutlar</h3>
-                <div className="flex flex-wrap gap-2">
-                  <span onClick={() => setQuery('/görev ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)]">
-                    /görev
-                  </span>
-                  <span onClick={() => setQuery('/not ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors">
-                    /not
-                  </span>
-                  <span onClick={() => setQuery('/müşteri ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors">
-                    /müşteri
-                  </span>
-                </div>
-
-                <h3 className="text-sm font-semibold text-[var(--color-ink-light)] mt-6">Kısa Yollar</h3>
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-green-600 shadow-sm cursor-pointer hover:border-green-500 flex items-center gap-2 transition-colors">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div> WhatsApp
-                  </span>
-                  <span className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-pink-600 shadow-sm cursor-pointer hover:border-pink-500 flex items-center gap-2 transition-colors">
-                    <div className="w-2 h-2 rounded-full bg-pink-500"></div> Instagram
-                  </span>
-                  <span className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-blue-600 shadow-sm cursor-pointer hover:border-blue-500 flex items-center gap-2 transition-colors">
-                    <div className="w-2 h-2 rounded-full bg-blue-500"></div> Outlook
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-sm font-semibold text-[var(--color-ink-light)]">Aktif Çalışma Alanı ({activeWorkspace})</h3>
-                  <span className="text-xs text-[var(--color-burnt-orange)] font-medium cursor-pointer">{dict.view_all}</span>
-                </div>
-                <div className="grid grid-cols-1 gap-3">
-                  {[
-                    { title: 'Son Görüşme', desc: 'Fiyat konusunda anlaşıldı.', time: '2s' },
-                    { title: 'Bekleyen Ödeme', desc: '5.000 TL', time: '1g' },
-                  ].map((ctx, i) => (
-                    <div key={i} className="bg-white p-3 rounded-xl border border-[var(--color-ink)]/5 shadow-sm space-y-1">
-                      <div className="font-semibold text-sm">{ctx.title}</div>
-                      <div className="text-xs text-[var(--color-ink-light)]">{ctx.desc}</div>
-                      <div className="text-[10px] text-[var(--color-ink)]/40 mt-2">{ctx.time} önce güncellendi</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
         </motion.div>
@@ -752,87 +982,139 @@ export default function AppClient({ dict }: { dict: any }) {
                             </div>
                           </div>
                         </div>
+
+                        {/* 3. Action Proposal Card */}
+                        {results?.actionProposal && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-2 p-5 bg-white border-2 border-[var(--color-burnt-orange)]/40 rounded-2xl shadow-sm flex flex-col gap-4 relative z-10"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="p-2 bg-[var(--color-burnt-orange)]/10 text-[var(--color-burnt-orange)] rounded-lg">
+                                {results.actionProposal.type === 'create_appointment' ? (
+                                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <h5 className="font-bold text-[var(--color-ink)] mb-1">
+                                  {dict?.awaiting_approval || "Onay Bekleniyor"}
+                                </h5>
+                                <div className="text-sm text-[var(--color-ink-light)] mb-3">
+                                  {results.actionProposal.type === 'multi_step_plan' ? (
+                                    <div className="flex flex-col gap-2 mt-2">
+                                      {results.actionProposal.steps?.map((step, idx) => (
+                                        <div key={idx} className="flex items-start gap-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                          <div className="w-5 h-5 rounded-full bg-[var(--color-burnt-orange)]/20 text-[var(--color-burnt-orange)] flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                                            {idx + 1}
+                                          </div>
+                                          <div>
+                                            <div className="font-bold text-[var(--color-ink)] text-xs mb-0.5">{step.title}</div>
+                                            <div className="text-xs text-[var(--color-ink-light)]">{step.description}</div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : results.actionProposal.type === 'create_appointment' ? (
+                                    <>
+                                      <span className="font-medium text-[var(--color-ink)]">{results.actionProposal.payload.customer}</span> ile <span className="font-medium text-[var(--color-ink)]">{new Date(results.actionProposal.payload.start).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> zamanında <span className="font-medium text-[var(--color-ink)]">"{results.actionProposal.payload.title}"</span> randevusu oluşturulacak. 
+                                      {results.actionProposal.payload.createMeet && " 🎥 Google Meet eklenecek."}
+                                    </>
+                                  ) : results.actionProposal.type === 'update_appointment' ? (
+                                    <>
+                                      <span className="font-medium text-[var(--color-ink)]">{results.actionProposal.payload.customer}</span> isimli müşterinin randevusu <span className="font-medium text-[var(--color-ink)]">{new Date(results.actionProposal.payload.start).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> zamanına güncellenecek.
+                                    </>
+                                  ) : results.actionProposal.type === 'delete_appointment' ? (
+                                    <>
+                                      <span className="font-medium text-[var(--color-ink)]">{results.actionProposal.payload.customer}</span> isimli müşterinin randevusu tamamen <strong>iptal edilecek</strong>.
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="font-medium text-[var(--color-ink)]">{results.actionProposal.payload.name}</span> isimli yeni bir müşteri kaydı oluşturulacak.
+                                    </>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => handleExecuteAction()}
+                                  disabled={results.actionProposal.buttonText.includes('İşleniyor') || results.actionProposal.buttonText.includes('Başarıyla')}
+                                  className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${
+                                    results.actionProposal.buttonText.includes('Başarıyla')
+                                      ? 'bg-green-500 text-white shadow-green-500/30'
+                                      : results.actionProposal.buttonText.includes('Hata')
+                                      ? 'bg-red-500 text-white'
+                                      : 'bg-[var(--color-burnt-orange)] hover:bg-orange-600 text-white shadow-lg shadow-orange-500/20'
+                                  }`}
+                                >
+                                  {results.actionProposal.buttonText}
+                                </button>
+                              </div>
+                            </div>
+                            <div className="text-xs text-[var(--color-ink)]/50 mt-1 flex items-center gap-1 border-t border-[var(--color-ink)]/5 pt-3">
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Değiştirmek istediğiniz bir detay varsa arama çubuğuna yazarak asistanı yönlendirebilirsiniz.
+                            </div>
+                          </motion.div>
+                        )}
                       </div>
                     </div>
                   </section>
                 )}
 
-                {/* Clarification Questions */}
-                {results.clarificationChips && results.clarificationChips.length > 0 && (
-                  <div className="space-y-3">
-                    <span className="text-[10px] font-bold tracking-widest text-[var(--color-ink-light)] uppercase">
-                      {results.context.score >= 80 ? 'HAZIR' : 'NETLEŞTİRME SORULARI'}
-                    </span>
-                    <div className="flex flex-col gap-2">
-                      {results.clarificationChips.map((chip, i) => (
-                        <div key={i} className="flex flex-col gap-2">
-                          <div 
-                            onClick={() => setActiveQuestion(activeQuestion === chip ? null : chip)}
-                            className={`border p-3 rounded-xl cursor-pointer transition-colors group ${
-                              activeQuestion === chip 
-                                ? 'bg-[var(--color-burnt-orange)]/10 border-[var(--color-burnt-orange)]/40' 
-                                : 'bg-[var(--color-burnt-orange)]/5 border-[var(--color-burnt-orange)]/20 hover:bg-[var(--color-burnt-orange)]/10'
-                            }`}
-                          >
-                            <p className={`text-xs font-semibold transition-colors ${
-                              activeQuestion === chip ? 'text-[var(--color-burnt-orange)]' : 'text-[var(--color-ink)] group-hover:text-[var(--color-burnt-orange)]'
-                            }`}>
-                              {chip}
-                            </p>
-                          </div>
-                          
-                          {/* Interactive Answer Input */}
-                          <AnimatePresence>
-                            {activeQuestion === chip && (
-                              <motion.form 
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="overflow-hidden"
-                                onSubmit={(e) => handleRefinedSearch(e, chip)}
-                              >
-                                <div className="flex items-center gap-2 mt-1 mb-2">
-                                  <input 
-                                    autoFocus
-                                    type="text"
-                                    placeholder="Cevabınızı yazın..."
-                                    value={questionAnswer}
-                                    onChange={(e) => setQuestionAnswer(e.target.value)}
-                                    className="flex-1 bg-white border border-[var(--color-ink)]/10 text-xs px-3 py-2 rounded-lg focus:outline-none focus:border-[var(--color-burnt-orange)]/50 transition-colors"
-                                  />
-                                  <button 
-                                    type="submit"
-                                    disabled={!questionAnswer.trim()}
-                                    className="bg-[var(--color-burnt-orange)] text-white p-2 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
-                                  >
-                                    <ArrowRight size={14} />
-                                  </button>
-                                </div>
-                              </motion.form>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      ))}
-                    </div>
+                {/* Chat Input for Continuous Conversation */}
+                <div className="pt-4 mt-6 border-t border-[var(--color-ink)]/5">
+                  <form 
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!questionAnswer.trim()) return;
+                      
+                      // Hafızaya yaz
+                      if (user) {
+                         const token = await user.getIdToken();
+                         await ingestMemory(
+                           `Asistan: ${aiResponse || 'Detay istendi.'} | Kullanıcı Cevabı: ${questionAnswer}`,
+                           'action',
+                           { source: 'clarification', author: 'user', createdAt: Date.now() },
+                           'clarification',
+                           'personal',
+                           user.uid,
+                           token
+                         );
+                      }
 
-                    {/* Action Button if Score >= 80 */}
-                    {results.context.score >= 80 && isCommand && (
-                       <div className="mt-4 pt-4">
-                         <button 
-                           onClick={() => {
-                             // Sadece arayüzü sıfırlar, veri zaten skor 80'i geçtiğinde arka planda kaydedildi.
-                             setQuery('');
-                             setIsSearching(false);
-                             setResults(null);
-                           }}
-                           className="w-full py-3.5 bg-[var(--color-burnt-orange)] text-white text-sm font-bold rounded-xl shadow-md hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
-                         >
-                           {getActionName(query)} <ArrowRight size={16} />
-                         </button>
-                       </div>
-                    )}
-                  </div>
-                )}
+                      const combinedQuery = `${query} - Ek Bilgi: ${questionAnswer}`;
+                      setQuery(combinedQuery);
+                      handleSearch(undefined, combinedQuery);
+                      setQuestionAnswer('');
+                    }}
+                    className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-[var(--color-ink)]/10 shadow-sm focus-within:border-[var(--color-burnt-orange)]/50 focus-within:ring-4 focus-within:ring-[var(--color-burnt-orange)]/10 transition-all"
+                  >
+                    <div className="flex-1 px-3">
+                      <input 
+                        type="text"
+                        autoFocus
+                        placeholder="Asistana cevap verin veya bir detay ekleyin..."
+                        value={questionAnswer}
+                        onChange={(e) => setQuestionAnswer(e.target.value)}
+                        className="w-full bg-transparent text-sm text-[var(--color-ink)] placeholder-[var(--color-ink-light)] focus:outline-none"
+                      />
+                    </div>
+                    <button 
+                      type="submit"
+                      disabled={!questionAnswer.trim() || isGenerating}
+                      className="bg-[var(--color-burnt-orange)] text-white p-3 rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center justify-center shrink-0"
+                    >
+                      <ArrowRight size={18} />
+                    </button>
+                  </form>
+                </div>
               </div>
 
               <div className="space-y-10">
@@ -954,7 +1236,7 @@ export default function AppClient({ dict }: { dict: any }) {
                   </div>
                 ) : (
                   customersList.map(customer => {
-                    const match = customer.content.match(/\/müşteri\s+(.*)/);
+                    const match = customer.content.match(/\/(?:customer|müşteri)\s+(.*)/);
                     const name = match ? match[1] : 'İsimsiz Müşteri';
                     return (
                       <button 

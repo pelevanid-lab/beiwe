@@ -50,7 +50,21 @@ export type WebResult = {
   imageUrl?: string;
 };
 
+export type ActionStep = {
+  title: string;
+  description: string;
+};
+
+export type ActionProposal = {
+  type: 'create_customer' | 'create_appointment' | 'multi_step_plan' | 'update_appointment' | 'delete_appointment';
+  steps?: ActionStep[];
+  payload: any;
+  buttonText: string;
+  isApproved?: boolean;
+};
+
 export type ClarityResponse = {
+  actionProposal?: ActionProposal;
   context: ClarityContext;
   clarificationChips: string[];
   collectiveResults: CollectiveResult[];

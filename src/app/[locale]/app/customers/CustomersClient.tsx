@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { Users, Search, Plus, UserPlus, Clock } from 'lucide-react';
+import { Users, Search, Plus, UserPlus, Clock, ChevronRight, FileText, Phone, Mail } from 'lucide-react';
 import { ingestMemory } from '@/lib/saule-core-client';
+import { useRouter } from 'next/navigation';
 
 export default function CustomersClient({ dict }: { dict: any }) {
   const { user } = useAuth();
   const [customers, setCustomers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const router = useRouter();
   
   // Modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -26,13 +28,26 @@ export default function CustomersClient({ dict }: { dict: any }) {
       const data = await res.json();
       const allNodes = data.nodes || [];
       
-      // Müşteri düğümlerini filtrele
+      // Müşteri düğümlerini filtrele (tarihe göre en yeni en üstte)
       const userCustomers = allNodes.filter((n: any) => 
         n.spaceId === user.uid && 
-        n.content.includes('/müşteri ')
+        (n.content.includes('/customer ') || n.content.includes('/müşteri '))
       ).sort((a: any, b: any) => b.createdAt - a.createdAt);
       
-      setCustomers(userCustomers);
+      // Aynı isimli müşterilerin sadece en güncel (en yeni) olanını göster
+      const uniqueCustomers: any[] = [];
+      const seenNames = new Set();
+      
+      userCustomers.forEach((c: any) => {
+        const match = c.content.match(/\/(?:customer|müşteri)\s+([^-]+)/i);
+        const name = match ? match[1].trim().toLowerCase() : '';
+        if (name && !seenNames.has(name)) {
+          seenNames.add(name);
+          uniqueCustomers.push(c);
+        }
+      });
+      
+      setCustomers(uniqueCustomers);
     } catch (err) {
       console.error("Failed to fetch customers:", err);
     } finally {
@@ -50,7 +65,7 @@ export default function CustomersClient({ dict }: { dict: any }) {
     
     setIsLoading(true);
     try {
-      let finalContent = `/müşteri ${newCustomerName.trim()}`;
+      let finalContent = `/customer ${newCustomerName.trim()}`;
       if (newCustomerDetails.trim()) {
         finalContent += ` - Ek Bilgi: ${newCustomerDetails.trim()}`;
       }
@@ -80,7 +95,7 @@ export default function CustomersClient({ dict }: { dict: any }) {
   const filteredCustomers = customers.filter(c => c.content.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const extractCustomerName = (content: string) => {
-    const match = content.match(/\/müşteri\s+([^-]+)/i);
+    const match = content.match(/\/(?:customer|müşteri)\s+([^-]+)/i);
     return match ? match[1].trim() : 'Bilinmeyen Müşteri';
   };
 
@@ -130,11 +145,11 @@ export default function CustomersClient({ dict }: { dict: any }) {
           />
         </div>
 
-        {/* Grid */}
+        {/* Table View */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="bg-white rounded-3xl border border-[var(--color-ink)]/5 shadow-sm p-8 space-y-4">
             {[1,2,3].map(i => (
-              <div key={i} className="h-40 rounded-2xl bg-[var(--color-ink)]/5 animate-pulse" />
+              <div key={i} className="h-16 rounded-xl bg-[var(--color-ink)]/5 animate-pulse" />
             ))}
           </div>
         ) : filteredCustomers.length === 0 ? (
@@ -142,37 +157,62 @@ export default function CustomersClient({ dict }: { dict: any }) {
             <UserPlus size={48} className="mb-4 opacity-50" />
             <h3 className="text-xl font-medium text-[var(--color-ink)]">Müşteri bulunamadı</h3>
             <p className="mt-2 text-center max-w-md">
-              Sağ üstteki düğmeyi kullanarak veya arama çubuğuna <strong>/müşteri Ahmet Bey</strong> yazarak ekleyebilirsiniz.
+              Sağ üstteki düğmeyi kullanarak veya arama çubuğuna <strong>/customer Ahmet Bey</strong> yazarak ekleyebilirsiniz.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCustomers.map(c => {
-              const name = extractCustomerName(c.content);
-              const details = extractCustomerDetails(c.content);
-              
-              return (
-                <div key={c.id} className="group bg-white rounded-3xl p-6 border border-[var(--color-ink)]/5 shadow-sm hover:shadow-xl hover:border-[var(--color-burnt-orange)]/30 transition-all duration-300 flex flex-col cursor-pointer">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-[var(--color-ink)]/5 flex items-center justify-center text-[var(--color-ink)] font-bold text-lg">
-                      {name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <h3 className="text-[var(--color-ink)] font-semibold text-lg line-clamp-1">{name}</h3>
-                      <div className="flex items-center gap-1 text-[var(--color-ink-light)] text-xs mt-1">
-                        <Clock size={12} />
-                        <span>{new Date(c.createdAt).toLocaleDateString('tr-TR')}</span>
-                      </div>
-                    </div>
-                  </div>
-                  {details && (
-                    <p className="text-[var(--color-ink-light)] text-sm line-clamp-3 mt-2 border-t border-[var(--color-ink)]/5 pt-3">
-                      {details}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
+          <div className="bg-white rounded-3xl border border-[var(--color-ink)]/5 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-[var(--color-ink)]/5 border-b border-[var(--color-ink)]/10">
+                  <tr>
+                    <th className="px-6 py-4 text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">Müşteri</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">Ek Bilgi</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">Kayıt Tarihi</th>
+                    <th className="px-6 py-4 text-right text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-ink)]/5">
+                  {filteredCustomers.map(c => {
+                    const name = extractCustomerName(c.content);
+                    const details = extractCustomerDetails(c.content);
+                    
+                    return (
+                      <tr 
+                        key={c.id} 
+                        onClick={() => router.push(`/tr/app/customers/${c.id}`)}
+                        className="hover:bg-[var(--color-burnt-orange)]/5 transition-colors cursor-pointer group"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-[var(--color-ink)]/5 flex items-center justify-center text-[var(--color-ink)] font-bold text-sm">
+                              {name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="font-semibold text-[var(--color-ink)]">{name}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-[var(--color-ink-light)] max-w-xs truncate">
+                            {details || '-'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1 text-sm text-[var(--color-ink-light)]">
+                            <Clock size={14} />
+                            {new Date(c.createdAt).toLocaleDateString('tr-TR')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <button className="text-[var(--color-burnt-orange)] opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-[var(--color-burnt-orange)]/10 rounded-lg inline-flex items-center gap-1 font-medium text-sm">
+                            Detay <ChevronRight size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
