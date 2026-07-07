@@ -27,6 +27,9 @@ export default function AppClient({ dict }: { dict: any }) {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [activeQuestion, setActiveQuestion] = useState<string | null>(null);
   const [questionAnswer, setQuestionAnswer] = useState<string>('');
+  const [workspaces, setWorkspaces] = useState<string[]>(['Kişisel', 'Ahmet Bey', 'Genel']);
+  const [activeWorkspace, setActiveWorkspace] = useState<string>('Kişisel');
+  const [showWebSearch, setShowWebSearch] = useState<boolean>(false);
   const hasAutoSearched = useRef(false);
 
   useEffect(() => {
@@ -69,17 +72,40 @@ export default function AppClient({ dict }: { dict: any }) {
     setAiResponse(null);
     setAiSynthesis(null);
     
+    let finalQuery = currentQuery;
+    let finalType = 'query';
+    let finalCategory = 'action';
+    
+    // Command Parsing
+    if (finalQuery.startsWith('/müşteri ')) {
+       const newCustomer = finalQuery.replace('/müşteri ', '').trim();
+       if (!workspaces.includes(newCustomer)) {
+         setWorkspaces(prev => [...prev, newCustomer]);
+       }
+       setActiveWorkspace(newCustomer);
+       setQuery('');
+       setIsSearching(false);
+       return; 
+    }
+    
+    if (finalQuery.startsWith('/görev ')) {
+       finalType = 'task';
+       finalCategory = 'action';
+       finalQuery = finalQuery.replace('/görev ', '').trim();
+    }
+
     try {
       // 1. Core Ingest (Save the query)
       await ingestMemory(
-        currentQuery, 
-        'action', 
+        finalQuery, 
+        finalCategory, 
         { source: 'search_bar', author: 'user', createdAt: Date.now() }, 
-        'query'
+        finalType,
+        activeWorkspace
       );
 
       // 2. Core Recall (Get context)
-      const composition = await recallContext(currentQuery, 'default', 'personal');
+      const composition = await recallContext(finalQuery, 'default', activeWorkspace);
 
       // 3. Get Verified Solutions
       const verified = await getVerifiedSolutions(composition);
@@ -159,15 +185,15 @@ export default function AppClient({ dict }: { dict: any }) {
           // Delegate the semantic ingestion to the Saule SML core layer.
           if (data.clarityScore && data.clarityScore >= 80 && user) {
              const memoryContent = data.synthesizedContext 
-                ? `${currentQuery} - ${data.synthesizedContext}`
-                : currentQuery;
+                ? `${finalQuery} - ${data.synthesizedContext}`
+                : finalQuery;
 
              ingestMemory(
                memoryContent, 
                'knowledge', 
                { source: 'search_bar', author: 'user', createdAt: Date.now() }, 
                'fact', 
-               'personal', 
+               activeWorkspace, 
                data.topic || 'default'
              ).catch(err => console.error("Failed to ingest high clarity memory via SML", err));
           }
@@ -275,8 +301,50 @@ export default function AppClient({ dict }: { dict: any }) {
   return (
     <div className="flex-1 w-full flex bg-[var(--color-paper)] h-screen overflow-hidden">
       
+      {/* Workspace Sidebar (Dynamic Customers) */}
+      <div className="w-64 bg-white/50 border-r border-[var(--color-ink)]/10 flex flex-col shrink-0">
+        <div className="p-4 border-b border-[var(--color-ink)]/5">
+          <h3 className="font-serif font-bold text-[var(--color-ink)] mb-1">Çalışma Alanları</h3>
+          <p className="text-[10px] text-[var(--color-ink-light)]">Müşteri veya proje seçin</p>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {workspaces.map(ws => (
+            <button 
+              key={ws}
+              onClick={() => setActiveWorkspace(ws)}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeWorkspace === ws 
+                  ? 'bg-[var(--color-burnt-orange)] text-white' 
+                  : 'text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5'
+              }`}
+            >
+              {ws}
+            </button>
+          ))}
+          <button 
+            onClick={() => setQuery('/müşteri ')}
+            className="w-full mt-2 text-left px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-burnt-orange)] hover:bg-[var(--color-burnt-orange)]/10 transition-colors flex items-center gap-2"
+          >
+            <span className="text-lg leading-none">+</span> Yeni Ekle
+          </button>
+        </div>
+      </div>
+
       {/* Main Column */}
       <div className="flex-1 flex flex-col items-center overflow-y-auto px-8 relative">
+        
+        {/* Mock Browser Tabs */}
+        <div className="w-full flex items-center gap-2 pt-4 pb-2 border-b border-[var(--color-ink)]/5 mb-4">
+           <button className="px-4 py-1.5 bg-white border border-[var(--color-ink)]/10 rounded-t-xl text-xs font-bold text-[var(--color-ink)] shadow-sm flex items-center gap-2">
+             <div className="w-2 h-2 rounded-full bg-[var(--color-burnt-orange)]"></div> Beiwe OS
+           </button>
+           <button className="px-4 py-1.5 bg-transparent text-xs font-medium text-[var(--color-ink-light)] hover:bg-black/5 rounded-t-xl transition-colors flex items-center gap-2">
+             <div className="w-3 h-3 rounded-full bg-green-500"></div> WhatsApp Web
+           </button>
+           <button className="px-4 py-1.5 bg-transparent text-xs font-medium text-[var(--color-ink-light)] hover:bg-black/5 rounded-t-xl transition-colors flex items-center gap-2">
+             <div className="w-3 h-3 rounded-full bg-pink-500"></div> Instagram
+           </button>
+        </div>
         <motion.div 
           initial={false}
           animate={{ 
@@ -327,34 +395,50 @@ export default function AppClient({ dict }: { dict: any }) {
             </div>
           </form>
 
-          {/* Initial State Suggestions */}
+          {/* Initial State Dashboard */}
           {!isSearching && (
             <div className="w-full mt-12 grid grid-cols-2 gap-8">
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-[var(--color-ink-light)]">{dict.clarifying_suggestions}</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-ink-light)]">Bugünün Görevleri</h3>
+                <div className="flex flex-col gap-2">
+                  <div className="bg-white p-3 rounded-xl border border-[var(--color-ink)]/5 shadow-sm flex items-center gap-3">
+                    <input type="checkbox" className="w-4 h-4 text-[var(--color-burnt-orange)] rounded border-gray-300 focus:ring-[var(--color-burnt-orange)]" />
+                    <span className="text-sm font-medium">Ahmet Bey'e teklif hazırla</span>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-[var(--color-ink)]/5 shadow-sm flex items-center gap-3">
+                    <input type="checkbox" className="w-4 h-4 text-[var(--color-burnt-orange)] rounded border-gray-300 focus:ring-[var(--color-burnt-orange)]" />
+                    <span className="text-sm font-medium">Ofis kirasını yatır</span>
+                  </div>
+                </div>
+                
+                <h3 className="text-sm font-semibold text-[var(--color-ink-light)] mt-6">Hızlı Komutlar</h3>
                 <div className="flex flex-wrap gap-2">
-                  {['How many m2?', 'Climate zone?', 'Usage?', 'Budget?', 'More...'].map((chip, i) => (
-                    <span key={i} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-ink)]/30">
-                      {chip}
-                    </span>
-                  ))}
+                  <span onClick={() => setQuery('/görev ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)]">
+                    /görev
+                  </span>
+                  <span onClick={() => setQuery('/fatura ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)]">
+                    /fatura
+                  </span>
+                  <span onClick={() => setQuery('/müşteri ')} className="px-4 py-2 bg-white border border-[var(--color-ink)]/10 rounded-full text-sm font-medium text-[var(--color-ink-light)] shadow-sm cursor-pointer hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)]">
+                    /müşteri
+                  </span>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-sm font-semibold text-[var(--color-ink-light)]">{dict.your_context}</h3>
+                  <h3 className="text-sm font-semibold text-[var(--color-ink-light)]">Aktif Müşteri Bağlamı ({activeWorkspace})</h3>
                   <span className="text-xs text-[var(--color-burnt-orange)] font-medium cursor-pointer">{dict.view_all}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3">
                   {[
-                    { title: 'AC research', desc: 'Istanbul - 110-120 m²', time: '2d' },
-                    { title: 'Istanbul house', desc: '3 rooms - 2 people', time: '1d' },
+                    { title: 'Son Görüşme', desc: 'Fiyat konusunda anlaşıldı.', time: '2s' },
+                    { title: 'Bekleyen Ödeme', desc: '5.000 TL', time: '1g' },
                   ].map((ctx, i) => (
                     <div key={i} className="bg-white p-3 rounded-xl border border-[var(--color-ink)]/5 shadow-sm space-y-1">
                       <div className="font-semibold text-sm">{ctx.title}</div>
                       <div className="text-xs text-[var(--color-ink-light)]">{ctx.desc}</div>
-                      <div className="text-[10px] text-[var(--color-ink)]/40 mt-2">{dict.updated_ago.replace('{time}', ctx.time)}</div>
+                      <div className="text-[10px] text-[var(--color-ink)]/40 mt-2">{ctx.time} önce güncellendi</div>
                     </div>
                   ))}
                 </div>
@@ -404,13 +488,13 @@ export default function AppClient({ dict }: { dict: any }) {
                           </div>
                         )}
 
-                        {/* 2. Main AI Answer */}
+                        {/* 2. Main AI Answer (Clarity Card) */}
                         <div className="flex items-start gap-4">
                           <div className="w-8 h-8 rounded-full bg-[var(--color-ink)] flex items-center justify-center shrink-0 mt-1">
                             <LogoIcon className="w-4 h-4 text-white" />
                           </div>
                           <div className="flex-1">
-                            <h4 className="text-xs font-bold tracking-widest text-[var(--color-ink-light)] mb-2 uppercase">Yapay Zeka Yanıtı</h4>
+                            <h4 className="text-xs font-bold tracking-widest text-[var(--color-ink-light)] mb-2 uppercase">Netlik Kartı</h4>
                             <div className="text-sm md:text-base text-[var(--color-ink)] leading-relaxed whitespace-pre-wrap">
                               {aiResponse ? (
                                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -422,7 +506,7 @@ export default function AppClient({ dict }: { dict: any }) {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                                   </svg>
-                                  <span>Gemini bağlamı sentezliyor ve yanıtlıyor...</span>
+                                  <span>Düşünce bulutu oluşturuluyor...</span>
                                 </div>
                               )}
                             </div>
@@ -576,31 +660,43 @@ export default function AppClient({ dict }: { dict: any }) {
 
                 {/* Removed redundant AI block from bottom */}
 
-                {/* 4. Web Results */}
-                {results.webResults.length > 0 && (
-                  <section className="space-y-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <div className="space-y-0.5">
-                        <h3 className="font-serif font-bold text-sm tracking-widest text-[var(--color-ink-light)]">{dict.web_results}</h3>
-                        <p className="text-xs text-[var(--color-ink)]/40">{dict.web_results_desc}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      {results.webResults.map(item => (
-                         <div key={item.id} className="flex gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors cursor-pointer border border-transparent hover:border-[var(--color-ink)]/5">
-                           <div className="flex-1 space-y-1">
-                             <h4 className="font-semibold text-sm text-[var(--color-ink)]">{item.title}</h4>
-                             <span className="text-xs text-[var(--color-ink)]/40 block mb-2">{item.url}</span>
-                             <p className="text-xs text-[var(--color-ink-light)] line-clamp-2">{item.description}</p>
-                           </div>
-                           <div className="w-20 h-20 bg-gray-200 rounded-lg shrink-0"></div>
-                         </div>
-                      ))}
-                    </div>
-                    <button className="w-full py-3 rounded-xl border border-[var(--color-ink)]/10 text-xs font-bold text-[var(--color-ink)] hover:bg-black/5 transition-colors">
-                      {dict.show_more}
-                    </button>
-                  </section>
+                {/* On-Demand Web Search Button */}
+                {!showWebSearch ? (
+                   <button 
+                     onClick={() => setShowWebSearch(true)}
+                     className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border-2 border-dashed border-[var(--color-ink)]/20 text-[var(--color-ink-light)] font-bold hover:bg-[var(--color-ink)]/5 hover:border-[var(--color-ink)]/40 transition-all mb-8"
+                   >
+                     🌐 Google'da Ara
+                   </button>
+                ) : (
+                  <>
+                    {/* 4. Web Results */}
+                    {results.webResults.length > 0 && (
+                      <section className="space-y-4">
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="space-y-0.5">
+                            <h3 className="font-serif font-bold text-sm tracking-widest text-[var(--color-ink-light)]">{dict.web_results}</h3>
+                            <p className="text-xs text-[var(--color-ink)]/40">{dict.web_results_desc}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          {results.webResults.map(item => (
+                             <div key={item.id} className="flex gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors cursor-pointer border border-transparent hover:border-[var(--color-ink)]/5">
+                               <div className="flex-1 space-y-1">
+                                 <h4 className="font-semibold text-sm text-[var(--color-ink)]">{item.title}</h4>
+                                 <span className="text-xs text-[var(--color-ink)]/40 block mb-2">{item.url}</span>
+                                 <p className="text-xs text-[var(--color-ink-light)] line-clamp-2">{item.description}</p>
+                               </div>
+                               <div className="w-20 h-20 bg-gray-200 rounded-lg shrink-0"></div>
+                             </div>
+                          ))}
+                        </div>
+                        <button className="w-full py-3 rounded-xl border border-[var(--color-ink)]/10 text-xs font-bold text-[var(--color-ink)] hover:bg-black/5 transition-colors">
+                          {dict.show_more}
+                        </button>
+                      </section>
+                    )}
+                  </>
                 )}
                 
               </div>
