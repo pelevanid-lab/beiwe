@@ -457,19 +457,18 @@ export default function AppClient({ dict }: { dict: any }) {
           }
           
           // Handle AI-driven UI Routing (route_ui tool or topic field)
-          if (data.topic === 'customers') {
-             openTab({
-               id: `customers-module`,
-               title: `Müşteriler`,
-               type: 'customers'
-             });
-          } else if (data.topic === 'appointments') {
-             openTab({
-               id: `appointments-module`,
-               title: `Randevular`,
-               type: 'appointments'
-             });
+          // data.uiRoute gelirse o önceliklidir, yoksa data.topic'e bakılır
+          const routeTarget = data.uiRoute || data.topic;
+          const moduleTabMap: Record<string, { id: string; title: string; type: AppTab['type'] }> = {
+            customers:    { id: 'customers-module',    title: 'Müşteriler',    type: 'customers' },
+            appointments: { id: 'appointments-module', title: 'Randevular',    type: 'appointments' },
+            notes:        { id: 'notes-module',        title: 'Notlar',        type: 'notes' },
+            docs:         { id: 'docs-module',         title: 'Dökümanlar',    type: 'docs' },
+          };
+          if (routeTarget && moduleTabMap[routeTarget]) {
+            openTab(moduleTabMap[routeTarget]);
           }
+
           
           if (data.clarificationQuestions || data.clarityScore !== undefined) {
              setResults(prev => {
@@ -1145,59 +1144,6 @@ export default function AppClient({ dict }: { dict: any }) {
                 </div>
               </div>
 
-              {/* MULTI-TAB WORKSPACE */}
-              {tabs.length > 0 && (
-                <div className="mt-8 flex flex-col h-[700px] bg-white rounded-3xl border border-[var(--color-ink)]/10 shadow-lg overflow-hidden">
-                  {/* Tab Bar */}
-                  <div className="flex items-center bg-[#f5f5f5] border-b border-[var(--color-ink)]/10 px-2 pt-2 gap-1 overflow-x-auto">
-                    {tabs.map(tab => (
-                      <div 
-                        key={tab.id}
-                        onClick={() => setActiveTabId(tab.id)}
-                        className={`group relative flex items-center gap-2 px-4 py-2.5 rounded-t-xl cursor-pointer select-none min-w-[150px] max-w-[250px] border border-b-0 transition-colors
-                          ${activeTabId === tab.id 
-                            ? 'bg-white border-[var(--color-ink)]/10 text-[var(--color-ink)] z-10 before:absolute before:-bottom-[1px] before:left-0 before:right-0 before:h-[1px] before:bg-white' 
-                            : 'bg-transparent border-transparent text-[var(--color-ink-light)] hover:bg-white/50 hover:text-[var(--color-ink)]'
-                          }`}
-                      >
-                        <div className="truncate flex-1 text-sm font-medium">
-                          {tab.title}
-                        </div>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-                          className={`p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/5 transition-all
-                            ${activeTabId === tab.id ? 'opacity-100' : ''}`}
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    ))}
-                    <div className="flex-1" />
-                    <button 
-                      onClick={closeAllTabs}
-                      className="px-3 py-1.5 text-xs font-medium text-[var(--color-ink-light)] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors mr-2 mb-1"
-                    >
-                      Tümünü Kapat
-                    </button>
-                  </div>
-                  
-                  {/* Tab Content Area */}
-                  <div className="flex-1 overflow-y-auto bg-white relative p-6">
-                    {tabs.map(tab => (
-                      <div 
-                        key={tab.id} 
-                        className={`absolute inset-0 p-6 overflow-y-auto transition-opacity duration-300 ${activeTabId === tab.id ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
-                      >
-                        {tab.type === 'customer' && <CustomerDetailClient dict={dict} id={tab.id.replace('customer-', '')} />}
-                        {tab.type === 'customers' && <CustomersClient dict={dict} />}
-                        {tab.type === 'appointments' && <AppointmentsClient dict={dict} />}
-                        {tab.type === 'notes' && <div className="p-8 text-center text-gray-500">Not Modülü Yapım Aşamasında</div>}
-                        {tab.type === 'docs' && <div className="p-8 text-center text-gray-500">Döküman Modülü Yapım Aşamasında</div>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <div className={`space-y-10 ${tabs.length > 0 ? 'hidden' : ''}`}>
                 {/* 2. Collective Results */}
@@ -1285,6 +1231,68 @@ export default function AppClient({ dict }: { dict: any }) {
 
 
                 
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── MODÜL PANELİ ─────────────────────────────────────────────────
+            Clarity Engine bir modülü tanıdığında bu alan açılır.
+            isSearching'e bağlı değil — her zaman çalışır.
+        ──────────────────────────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {tabs.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 48 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 24 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 200 }}
+              className="w-full max-w-3xl flex flex-col mb-8 mt-4"
+            >
+              {/* Tab Bar */}
+              <div className="flex items-center bg-[#f5f5f5] border border-b-0 border-[var(--color-ink)]/10 rounded-t-2xl px-2 pt-2 gap-1 overflow-x-auto">
+                {tabs.map(tab => (
+                  <div
+                    key={tab.id}
+                    onClick={() => setActiveTabId(tab.id)}
+                    className={`group relative flex items-center gap-2 px-4 py-2.5 rounded-t-xl cursor-pointer select-none min-w-[140px] max-w-[240px] border border-b-0 transition-colors
+                      ${activeTabId === tab.id
+                        ? 'bg-white border-[var(--color-ink)]/10 text-[var(--color-ink)] z-10 before:absolute before:-bottom-[1px] before:left-0 before:right-0 before:h-[1px] before:bg-white'
+                        : 'bg-transparent border-transparent text-[var(--color-ink-light)] hover:bg-white/70 hover:text-[var(--color-ink)]'
+                      }`}
+                  >
+                    <div className="truncate flex-1 text-sm font-medium">{tab.title}</div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                      className={`p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/5 transition-all ${activeTabId === tab.id ? 'opacity-60' : ''}`}
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex-1" />
+                <button
+                  onClick={closeAllTabs}
+                  className="px-3 py-1.5 text-xs font-medium text-[var(--color-ink-light)] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors mr-2 mb-1 shrink-0"
+                >
+                  Kapat
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="relative bg-white border border-[var(--color-ink)]/10 rounded-b-2xl overflow-hidden" style={{ minHeight: 520 }}>
+                {tabs.map(tab => (
+                  <div
+                    key={tab.id}
+                    className={`absolute inset-0 overflow-y-auto transition-opacity duration-300 ${activeTabId === tab.id ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
+                  >
+                    {tab.type === 'customer' && <CustomerDetailClient dict={dict} id={tab.id.replace('customer-', '')} />}
+                    {tab.type === 'customers' && <CustomersClient dict={dict} />}
+                    {tab.type === 'appointments' && <AppointmentsClient dict={dict} />}
+                    {tab.type === 'notes' && <div className="p-8 text-center text-gray-400 text-sm">Not modülü yakında.</div>}
+                    {tab.type === 'docs' && <div className="p-8 text-center text-gray-400 text-sm">Döküman modülü yakında.</div>}
+                  </div>
+                ))}
               </div>
             </motion.div>
           )}

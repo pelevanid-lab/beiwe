@@ -56,7 +56,7 @@
   },
   "app": {
     "what_needs_clarity": "What needs clarity?",
-    "search_placeholder": "search, enter a command, or paste a url...",
+    "search_placeholder": "Ask anything, mention with @, perform actions with /",
     "chat_input_placeholder": "Answer the assistant, add a detail, or ask a new question...",
     "clarifying_suggestions": "Clarifying suggestion questions",
     "your_context": "Your context",
