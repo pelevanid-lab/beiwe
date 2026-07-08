@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { adminDb } from '@/lib/firebase-admin';
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
@@ -50,10 +51,32 @@ export async function GET(req: NextRequest) {
     // We redirect back to the frontend with the tokens in the URL fragment or query so the client can save them.
     // Use query params for simplicity. The frontend will grab them and strip them from the URL immediately.
     
+    // FETCH USER INFO TO SAVE TO FIRESTORE
+    if (data.access_token) {
+      try {
+        const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: { Authorization: `Bearer ${data.access_token}` }
+        });
+        const userInfo = await userInfoRes.json();
+        if (userInfo.email) {
+          await adminDb.collection('google_tokens').doc(userInfo.email).set({
+            access_token: data.access_token,
+            refresh_token: data.refresh_token || null,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        }
+      } catch (err) {
+        console.error('Failed to save token to Firestore:', err);
+      }
+    }
+
     const params = new URLSearchParams();
     if (data.access_token) params.set('access_token', data.access_token);
     if (data.refresh_token) params.set('refresh_token', data.refresh_token);
     if (data.expires_in) params.set('expires_in', data.expires_in);
+    
+    const state = searchParams.get('state');
+    if (state) params.set('service', state);
 
     return NextResponse.redirect(new URL(`/tr/app/integrations/google?${params.toString()}`, req.url));
 

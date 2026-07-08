@@ -26,21 +26,12 @@ const availableIntegrations = [
   },
   {
     id: 'google',
-    name: 'Google Takvim & Docs',
-    description: 'Randevularınızı Google Takvim ile otomatik senkronize edin ve Google Dokümanlarınızı bağlayın.',
+    name: 'Google Entegrasyonları',
+    description: 'Takvim, Gmail, Dokümanlar ve Kişiler servislerini tek bir yerden yönetin. Her izni ayrı ayrı açabilirsiniz.',
     icon: CalendarIcon,
     color: 'text-red-500',
     bgColor: 'bg-red-500/10',
     status: 'disconnected', // 'connected', 'disconnected', 'coming_soon'
-  },
-  {
-    id: 'outlook',
-    name: 'Microsoft Outlook',
-    description: 'E-postalarınızı ve Outlook takviminizi Beiwe üzerinden yönetin.',
-    icon: Mail,
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-500/10',
-    status: 'disconnected',
   },
   {
     id: 'slack',

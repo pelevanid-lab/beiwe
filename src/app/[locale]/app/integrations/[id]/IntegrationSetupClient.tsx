@@ -1,46 +1,105 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ArrowLeft, MessageCircle, Mail, Calendar as CalendarIcon, Check, Copy, AlertCircle, Camera, Shield, Zap } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Mail, Calendar as CalendarIcon, Check, Copy, AlertCircle, Camera, Shield, Zap, FileText, Users, Inbox } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { auth } from '@/lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+
+// Google OAuth scope definitions — each service has its own scope
+const GOOGLE_SERVICES = [
+  {
+    key: 'calendar',
+    label: 'Google Takvim',
+    description: 'Randevularınızı okuma ve yeni etkinlik oluşturma izni.',
+    icon: CalendarIcon,
+    color: 'text-blue-600',
+    bg: 'bg-blue-50',
+    scope: 'https://www.googleapis.com/auth/calendar',
+    storageKey: 'google_perm_calendar',
+  },
+  {
+    key: 'gmail',
+    label: 'Gmail',
+    description: 'E-postalarınızı okuma ve gönderme izni. Müşteri iletişimini Beiwe üzerinden yönetin.',
+    icon: Inbox,
+    color: 'text-red-600',
+    bg: 'bg-red-50',
+    scope: 'https://www.googleapis.com/auth/gmail.modify',
+    storageKey: 'google_perm_gmail',
+  },
+  {
+    key: 'docs',
+    label: 'Google Dokümanlar & Drive',
+    description: 'Drive dosyalarınızı ve Dokümanlarınızı okuma izni.',
+    icon: FileText,
+    color: 'text-yellow-600',
+    bg: 'bg-yellow-50',
+    scope: 'https://www.googleapis.com/auth/drive.readonly',
+    storageKey: 'google_perm_docs',
+  },
+  {
+    key: 'contacts',
+    label: 'Google Kişiler',
+    description: 'Kişi listenizi okuma ve müşterilerle eşleştirme izni.',
+    icon: Users,
+    color: 'text-green-600',
+    bg: 'bg-green-50',
+    scope: 'https://www.googleapis.com/auth/contacts.readonly',
+    storageKey: 'google_perm_contacts',
+  },
+] as const;
+
+
 
 export default function IntegrationSetupClient({ dict, integrationId }: { dict: any, integrationId: string }) {
   const router = useRouter();
   const { user } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [googleCalendarPermission, setGoogleCalendarPermission] = useState(false);
+  const [googlePermissions, setGooglePermissions] = useState<Record<string, boolean>>({});
   const [waPhoneId, setWaPhoneId] = useState('');
   const [waToken, setWaToken] = useState('');
 
   // Check URL for tokens on load
   React.useEffect(() => {
+    // Önce mevcut izinleri localStorage'dan oku
+    const perms: Record<string, boolean> = {};
+    GOOGLE_SERVICES.forEach(s => {
+      perms[s.key] = localStorage.getItem(s.storageKey) === 'true';
+    });
+    setGooglePermissions(perms);
+
     const params = new URLSearchParams(window.location.search);
     const accessToken = params.get('access_token');
     const refreshToken = params.get('refresh_token');
+    const service = params.get('service');
     
     if (accessToken) {
       localStorage.setItem('google_access_token', accessToken);
       if (refreshToken) {
         localStorage.setItem('google_refresh_token', refreshToken);
       }
-      setGoogleCalendarPermission(true);
+      
+      if (service) {
+        const srv = GOOGLE_SERVICES.find(s => s.key === service);
+        if (srv) {
+          localStorage.setItem(srv.storageKey, 'true');
+          setGooglePermissions(prev => ({ ...prev, [service]: true }));
+        }
+      }
+
       setIsSuccess(true);
       setTimeout(() => setIsSuccess(false), 3000);
       
       // Clean URL
       const newUrl = window.location.pathname;
       window.history.replaceState({}, document.title, newUrl);
-    } else {
-      const storedToken = localStorage.getItem('google_access_token');
-      if (storedToken) setGoogleCalendarPermission(true);
     }
   }, []);
 
-  const handleGooglePermission = async () => {
+  const handleSpecificGooglePermission = async (service: typeof GOOGLE_SERVICES[number]) => {
     setIsSaving(true);
     try {
       const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -51,9 +110,8 @@ export default function IntegrationSetupClient({ dict, integrationId }: { dict: 
       }
 
       const redirectUri = `${window.location.origin}/api/auth/google/callback`;
-      const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/contacts.readonly');
-      
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
+      // state parametresi ile hangi servisin yetkilendirildiğini callback'e taşıyoruz
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(service.scope)}&access_type=offline&prompt=consent&state=${service.key}&include_granted_scopes=true`;
       
       window.location.href = authUrl;
     } catch (error) {
@@ -66,7 +124,38 @@ export default function IntegrationSetupClient({ dict, integrationId }: { dict: 
   const handleDisconnectGoogle = () => {
     localStorage.removeItem('google_access_token');
     localStorage.removeItem('google_refresh_token');
-    setGoogleCalendarPermission(false);
+    GOOGLE_SERVICES.forEach(s => localStorage.removeItem(s.storageKey));
+    setGooglePermissions({});
+  };
+
+  const handleActivateWatch = async () => {
+    const token = localStorage.getItem('google_access_token');
+    if (!token) {
+      alert("Access token bulunamadı. Lütfen önce Google hesabınızı bağlayın.");
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/gmail/watch', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        alert("Başarılı! Gerçek zamanlı bildirimler aktif edildi. (History ID: " + data.historyId + ")");
+      } else {
+        alert("Hata: " + (data.error || "Bilinmeyen bir hata oluştu"));
+      }
+    } catch (e: any) {
+      alert("Bağlantı hatası: " + e.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSave = async () => {
@@ -187,47 +276,64 @@ export default function IntegrationSetupClient({ dict, integrationId }: { dict: 
         if (isGoogleConnected) {
           return (
             <div className="space-y-6">
-              <div className={`p-4 rounded-xl flex gap-3 text-sm ${googleCalendarPermission ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
-                <AlertCircle className="shrink-0 mt-0.5" size={18} />
-                <div>
-                  {googleCalendarPermission 
-                    ? "Google hesabınız başarıyla bağlandı. Takvim ve Dokümanlar senkronizasyonu aktif." 
-                    : "Google hesabınız ile giriş yapılmış fakat Takvim ve Doküman izinleri verilmemiş. Lütfen aşağıdan izin verin."}
-                </div>
-              </div>
               <div className="flex items-center gap-4 p-6 border border-[var(--color-ink)]/10 rounded-2xl bg-white">
-                <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xl">
+                <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xl shrink-0">
                   {googleProvider.email?.charAt(0).toUpperCase() || 'G'}
                 </div>
                 <div className="flex-1">
                   <h3 className="font-bold text-[var(--color-ink)]">{googleProvider.email}</h3>
-                  <p className="text-sm text-[var(--color-ink-light)]">Google OAuth Sağlayıcısı</p>
+                  <p className="text-sm text-[var(--color-ink-light)]">Google Ana Hesabı Bağlı</p>
                 </div>
-                <button 
-                  onClick={handleDisconnectGoogle}
-                  className="px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-sm font-semibold transition-colors"
-                >
-                  Bağlantıyı Kes
-                </button>
-              </div>
-              <div className="pt-4 border-t border-[var(--color-ink)]/5">
-                <h4 className="font-semibold text-[var(--color-ink)] mb-2">Ek İzinler</h4>
-                <div className="flex items-center justify-between p-4 bg-[var(--color-paper)] rounded-xl border border-[var(--color-ink)]/5">
-                  <div className="flex-1">
-                    <div className="font-medium text-[var(--color-ink)] text-sm">Takvim ve Dokümanlar Okuma/Yazma İzni</div>
-                    <div className="text-xs text-[var(--color-ink-light)] mt-1">Randevularınızı ve dokümanlarınızı yönetmek için gereklidir.</div>
-                  </div>
+                <div className="flex flex-col gap-2 shrink-0">
                   <button 
-                    disabled={isSaving || googleCalendarPermission}
-                    onClick={handleGooglePermission}
-                    className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-                      googleCalendarPermission 
-                        ? 'bg-green-100 text-green-700' 
-                        : 'bg-[var(--color-ink)] text-white hover:bg-gray-800'
-                    }`}
+                    onClick={handleDisconnectGoogle}
+                    className="px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-sm font-semibold transition-colors"
                   >
-                    {isSaving ? 'Bekleniyor...' : googleCalendarPermission ? 'İzin Verildi' : 'İzin Ver'}
+                    Tüm Google Bağlantısını Kes
                   </button>
+                  {googlePermissions['gmail'] && (
+                    <button 
+                      onClick={handleActivateWatch}
+                      disabled={isSaving}
+                      className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
+                    >
+                      {isSaving ? 'İşleniyor...' : 'Canlı Bildirimleri Başlat'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              
+              <div className="pt-4 border-t border-[var(--color-ink)]/5">
+                <h4 className="font-semibold text-[var(--color-ink)] mb-4">Servis İzinleri</h4>
+                <div className="space-y-3">
+                  {GOOGLE_SERVICES.map(service => {
+                    const hasPerm = googlePermissions[service.key];
+                    
+                    return (
+                      <div key={service.key} className="flex items-center justify-between p-4 bg-[var(--color-paper)] rounded-xl border border-[var(--color-ink)]/5">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${service.bg} ${service.color}`}>
+                            <service.icon size={20} />
+                          </div>
+                          <div>
+                            <div className="font-medium text-[var(--color-ink)] text-sm">{service.label}</div>
+                            <div className="text-xs text-[var(--color-ink-light)] mt-0.5 max-w-md">{service.description}</div>
+                          </div>
+                        </div>
+                        <button 
+                          disabled={isSaving || hasPerm}
+                          onClick={() => handleSpecificGooglePermission(service)}
+                          className={`px-5 py-2 text-xs font-bold rounded-lg transition-colors ml-4 shrink-0 shadow-sm ${
+                            hasPerm 
+                              ? 'bg-green-100 text-green-700 shadow-none' 
+                              : 'bg-[var(--color-ink)] text-white hover:bg-gray-800'
+                          }`}
+                        >
+                          {isSaving ? 'Bekleniyor...' : hasPerm ? 'İzin Verildi' : 'İzin Ver'}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -240,30 +346,15 @@ export default function IntegrationSetupClient({ dict, integrationId }: { dict: 
               <CalendarIcon size={48} className="text-red-500 mb-4" />
               <h3 className="text-xl font-bold text-[var(--color-ink)] mb-2">Google Hesabınızı Bağlayın</h3>
               <p className="text-center text-[var(--color-ink-light)] max-w-md mb-8">
-                Takvim randevularınızı ve Dokümanlarınızı senkronize etmek için Google ile güvenli giriş yapın.
+                Takvim, Gmail, Dokümanlar ve Kişilerinizi Beiwe üzerinden yönetmek için Google ile güvenli giriş yapın.
               </p>
               
-              <button className="bg-white border border-gray-300 text-gray-700 px-8 py-3 rounded-xl font-semibold flex items-center gap-3 hover:bg-gray-50 transition-colors shadow-sm">
+              <button 
+                onClick={() => handleSpecificGooglePermission(GOOGLE_SERVICES[0])}
+                className="bg-white border border-gray-300 text-gray-700 px-8 py-3 rounded-xl font-semibold flex items-center gap-3 hover:bg-gray-50 transition-colors shadow-sm"
+              >
                 <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
                 Google ile Giriş Yap
-              </button>
-            </div>
-          </div>
-        );
-      
-      case 'outlook':
-        return (
-          <div className="space-y-6">
-            <div className="flex flex-col items-center justify-center py-10 bg-[var(--color-paper)] rounded-2xl border border-[var(--color-ink)]/10">
-              <Mail size={48} className="text-blue-500 mb-4" />
-              <h3 className="text-xl font-bold text-[var(--color-ink)] mb-2">Microsoft Hesabınızı Bağlayın</h3>
-              <p className="text-center text-[var(--color-ink-light)] max-w-md mb-8">
-                Outlook E-postalarınızı ve Takviminizi yönetmek için Microsoft hesabınızla giriş yapın.
-              </p>
-              
-              <button className="bg-[#00A4EF] text-white px-8 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-[#0092D6] transition-colors shadow-lg">
-                <img src="https://www.svgrepo.com/show/475666/microsoft-color.svg" alt="Microsoft" className="w-5 h-5 bg-white rounded-sm p-0.5" />
-                Microsoft ile Giriş Yap
               </button>
             </div>
           </div>
@@ -283,7 +374,6 @@ export default function IntegrationSetupClient({ dict, integrationId }: { dict: 
       case 'whatsapp': return { icon: MessageCircle, title: 'WhatsApp Business API', color: 'text-green-500', bg: 'bg-green-500/10' };
       case 'instagram': return { icon: Camera, title: 'Instagram (Meta)', color: 'text-pink-500', bg: 'bg-pink-500/10' };
       case 'google': return { icon: CalendarIcon, title: 'Google Çalışma Alanı', color: 'text-red-500', bg: 'bg-red-500/10' };
-      case 'outlook': return { icon: Mail, title: 'Microsoft Outlook', color: 'text-blue-500', bg: 'bg-blue-500/10' };
       default: return { icon: Zap, title: 'Entegrasyon Ayarları', color: 'text-[var(--color-burnt-orange)]', bg: 'bg-[var(--color-burnt-orange)]/10' };
     }
   };

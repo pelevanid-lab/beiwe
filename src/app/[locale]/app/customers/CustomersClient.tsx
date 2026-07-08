@@ -135,7 +135,10 @@ export default function CustomersClient({ dict }: { dict: any }) {
         
         let details = '';
         if (phone) details += `Telefon: ${phone} `;
-        if (email) details += `E-posta: ${email} `;
+        if (email) {
+          const safeEmail = email.replace(/@/g, '[AT]').replace(/\./g, '[DOT]');
+          details += `E-posta: ${safeEmail} `;
+        }
         
         let finalContent = `/customer ${name} - Tip: Lead`;
         if (details.trim()) {

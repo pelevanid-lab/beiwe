@@ -36,7 +36,10 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
 
   const extractEmail = (content: string) => {
     const explicitMatch = content.match(/- E-posta:\s*(.*?)(?=\s+- |$)/i);
-    if (explicitMatch && explicitMatch[1].trim()) return explicitMatch[1].trim();
+    if (explicitMatch && explicitMatch[1].trim()) {
+      let email = explicitMatch[1].trim();
+      return email.replace(/\[AT\]/g, '@').replace(/\[DOT\]/g, '.');
+    }
 
     const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
     return emailMatch ? emailMatch[0] : null;
@@ -170,7 +173,9 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
     if (!customer) return;
     const email = extractEmail(customer.content);
     if (email) {
-      window.location.href = `mailto:${email}`;
+      const name = extractCustomerName(customer.content);
+      const currentLocale = pathname.split('/')[1] || 'tr';
+      router.push(`/${currentLocale}/app/inbox?customer=${encodeURIComponent(name)}&platform=gmail&contact=${encodeURIComponent(email)}`);
     } else {
       alert(dict.customers.email_not_found || "E-posta adresi bulunamadı.");
     }
@@ -180,17 +185,9 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
     if (!customer) return;
     const phone = extractPhone(customer.content);
     if (phone) {
-      let cleanStr = phone.replace(/[\s\-\.()]/g, '');
-      if (cleanStr.startsWith('+')) {
-        cleanStr = cleanStr.substring(1);
-      } else if (cleanStr.startsWith('00')) {
-        cleanStr = cleanStr.substring(2);
-      } else if (cleanStr.startsWith('0')) {
-        cleanStr = '90' + cleanStr.substring(1);
-      } else if (!cleanStr.startsWith('90')) {
-        cleanStr = '90' + cleanStr;
-      }
-      window.open(`https://wa.me/${cleanStr}`, '_blank');
+      const name = extractCustomerName(customer.content);
+      const currentLocale = pathname.split('/')[1] || 'tr';
+      router.push(`/${currentLocale}/app/inbox?customer=${encodeURIComponent(name)}&platform=whatsapp&contact=${encodeURIComponent(phone)}`);
     } else {
       alert("WhatsApp için geçerli bir telefon numarası bulunamadı.");
     }
@@ -257,7 +254,8 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
         newContent += ` - Telefon: ${editPhone.trim()}`;
       }
       if (editEmail.trim()) {
-        newContent += ` - E-posta: ${editEmail.trim()}`;
+        const safeEmail = editEmail.trim().replace(/@/g, '[AT]').replace(/\./g, '[DOT]');
+        newContent += ` - E-posta: ${safeEmail}`;
       }
       if (editDetails.trim()) {
         newContent += ` - Ek Bilgi: ${editDetails.trim()}`;
