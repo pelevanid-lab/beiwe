@@ -4,7 +4,16 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    // Google Pub/Sub sends the message in body.message.data (base64 encoded)
+    const { getAdminDb } = await import('@/lib/firebase-admin');
+    const adminDb = getAdminDb();
+
+    // Log the raw incoming webhook to Firestore so we can see it
+    await adminDb.collection('webhook_logs').add({
+      timestamp: new Date().toISOString(),
+      source: 'gmail',
+      payload: body
+    });
+
     if (!body.message || !body.message.data) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
@@ -17,23 +26,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No email address found' }, { status: 400 });
     }
 
-    const { getAdminDb } = await import('@/lib/firebase-admin');
-    const adminDb = getAdminDb();
-
-    // Fetch the stored tokens for this user
     const tokenDoc = await adminDb.collection('google_tokens').doc(emailAddress).get();
     
     if (!tokenDoc.exists) {
-      console.warn(`No token found for email: ${emailAddress}`);
-      return NextResponse.json({ success: true }); // Return 200 so Pub/Sub doesn't retry
+      await adminDb.collection('webhook_logs').add({ error: 'No token found', emailAddress });
+      return NextResponse.json({ success: true });
     }
 
-    let { access_token, refresh_token } = tokenDoc.data()!;
+    let { access_token } = tokenDoc.data()!;
 
-    // In a production app, we would check if access_token is expired and refresh it using refresh_token here.
-    // For simplicity, we assume access_token is valid.
-
-    // 1. Fetch History to find new messages
+    // 1. Fetch History
     const historyRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=${historyId}`, {
       headers: { Authorization: `Bearer ${access_token}` }
     });
@@ -41,11 +43,10 @@ export async function POST(request: Request) {
     const historyData = await historyRes.json();
     
     if (!historyRes.ok) {
-      console.error('History API Error:', historyData);
-      return NextResponse.json({ success: true }); // Acknowledge to prevent retries
+      await adminDb.collection('webhook_logs').add({ error: 'History API Error', data: historyData });
+      return NextResponse.json({ success: true }); 
     }
 
-    // historyData.history contains arrays of messagesAdded
     const newMessages: string[] = [];
     if (historyData.history) {
       historyData.history.forEach((hist: any) => {
@@ -57,30 +58,27 @@ export async function POST(request: Request) {
       });
     }
 
-    if (newMessages.length === 0) {
-      // Sometimes it's just a label change or send event. We can also just fetch the single latest message.
-      // But let's fetch the actual new messages added.
-    }
+    await adminDb.collection('webhook_logs').add({ info: 'New Messages Found', count: newMessages.length, newMessages });
 
-    // 2. Fetch the actual content of new messages
+    // 2. Fetch the actual content
     for (const msgId of newMessages) {
       const msgRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`, {
         headers: { Authorization: `Bearer ${access_token}` }
       });
       const msgData = await msgRes.json();
       
-      if (!msgRes.ok) continue;
+      if (!msgRes.ok) {
+        await adminDb.collection('webhook_logs').add({ error: 'Message API Error', msgId, data: msgData });
+        continue;
+      }
 
-      // Extract details
       const headers = msgData.payload.headers;
       const subject = headers.find((h: any) => h.name === 'Subject')?.value || 'Konusuz';
       const from = headers.find((h: any) => h.name === 'From')?.value || 'Bilinmeyen';
       const to = headers.find((h: any) => h.name === 'To')?.value || emailAddress;
 
-      // Extremely basic body extraction (assuming text/plain or snippet)
       let textBody = msgData.snippet || '';
 
-      // Prepare Document
       const inboxMessage = {
         id: msgData.id,
         threadId: msgData.threadId,
@@ -98,9 +96,8 @@ export async function POST(request: Request) {
         ]
       };
 
-      // 3. Save to Firestore `inbox_messages`
       await adminDb.collection('inbox_messages').doc(msgData.id).set(inboxMessage, { merge: true });
-      console.log(`Saved new message ${msgData.id} to Firestore!`);
+      await adminDb.collection('webhook_logs').add({ info: 'Successfully saved message', msgId });
     }
 
     return NextResponse.json({ success: true });
