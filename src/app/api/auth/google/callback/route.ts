@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/firebase-admin';
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
@@ -17,9 +16,6 @@ export async function GET(req: NextRequest) {
   try {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    
-    // Redirect URI must exactly match what is configured in Google Cloud Console
-    // Since we're usually running locally on 3000:
     const redirectUri = `${req.nextUrl.origin}/api/auth/google/callback`;
 
     if (!clientId || !clientSecret) {
@@ -47,37 +43,19 @@ export async function GET(req: NextRequest) {
       throw new Error(data.error_description || data.error || 'Failed to exchange token');
     }
 
-    // data contains access_token, refresh_token (if first time or prompt=consent), expires_in
-    // We redirect back to the frontend with the tokens in the URL fragment or query so the client can save them.
-    // Use query params for simplicity. The frontend will grab them and strip them from the URL immediately.
-    
-    // FETCH USER INFO TO SAVE TO FIRESTORE
+    // FIRE-AND-FORGET: Save to Firestore in background. Dynamic import ensures
+    // any Firebase init failure NEVER crashes the redirect.
     if (data.access_token) {
-      try {
-        const adminDb = getAdminDb();
-        const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-          headers: { Authorization: `Bearer ${data.access_token}` }
-        });
-        const userInfo = await userInfoRes.json();
-        if (userInfo.email) {
-          await adminDb.collection('google_tokens').doc(userInfo.email).set({
-            access_token: data.access_token,
-            refresh_token: data.refresh_token || null,
-            updatedAt: new Date().toISOString()
-          }, { merge: true });
-        }
-      } catch (err: any) {
-        console.error('Failed to save token to Firestore:', err);
-        // We throw so it goes to the outer catch and the user sees the error on the frontend, rather than a silent failure or 500 page.
-        throw new Error('Firebase Kayıt Hatası: ' + (err.message || 'Bilinmeyen Hata'));
-      }
+      saveTokenToFirestore(data.access_token, data.refresh_token).catch((err) => {
+        console.error('Background Firestore save failed (non-critical):', err?.message);
+      });
     }
 
     const params = new URLSearchParams();
     if (data.access_token) params.set('access_token', data.access_token);
     if (data.refresh_token) params.set('refresh_token', data.refresh_token);
     if (data.expires_in) params.set('expires_in', data.expires_in);
-    
+
     const state = searchParams.get('state');
     if (state) params.set('service', state);
 
@@ -86,5 +64,29 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     console.error('Callback handling error:', err);
     return NextResponse.redirect(new URL(`/tr/app/integrations/google?error=${encodeURIComponent(err.message)}`, req.url));
+  }
+}
+
+// Completely isolated — any error here is logged but NEVER surfaces to the user
+async function saveTokenToFirestore(accessToken: string, refreshToken?: string) {
+  try {
+    const { getAdminDb } = await import('@/lib/firebase-admin');
+    const adminDb = getAdminDb();
+
+    const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const userInfo = await userInfoRes.json();
+
+    if (userInfo.email) {
+      await adminDb.collection('google_tokens').doc(userInfo.email).set({
+        access_token: accessToken,
+        refresh_token: refreshToken || null,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      console.log(`Token saved to Firestore for: ${userInfo.email}`);
+    }
+  } catch (err: any) {
+    console.error('saveTokenToFirestore error:', err?.message);
   }
 }

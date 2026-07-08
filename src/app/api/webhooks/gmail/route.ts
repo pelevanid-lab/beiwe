@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/firebase-admin';
 
 export async function POST(request: Request) {
   try {
@@ -18,6 +17,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No email address found' }, { status: 400 });
     }
 
+    const { getAdminDb } = await import('@/lib/firebase-admin');
     const adminDb = getAdminDb();
 
     // Fetch the stored tokens for this user
