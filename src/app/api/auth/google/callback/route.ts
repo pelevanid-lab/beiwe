@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
     // FETCH USER INFO TO SAVE TO FIRESTORE
     if (data.access_token) {
       try {
+        const adminDb = getAdminDb();
         const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
           headers: { Authorization: `Bearer ${data.access_token}` }
         });
@@ -65,8 +66,10 @@ export async function GET(req: NextRequest) {
             updatedAt: new Date().toISOString()
           }, { merge: true });
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to save token to Firestore:', err);
+        // We throw so it goes to the outer catch and the user sees the error on the frontend, rather than a silent failure or 500 page.
+        throw new Error('Firebase Kayıt Hatası: ' + (err.message || 'Bilinmeyen Hata'));
       }
     }
 
