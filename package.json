@@ -43,5 +43,8 @@
     "fs": false,
     "path": false,
     "crypto": false
+  },
+  "overrides": {
+    "jose": "4.15.5"
   }
 }
