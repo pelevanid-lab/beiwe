@@ -6,6 +6,7 @@ import { CreateAppointmentAction } from './actions/create_appointment';
 import { UpdateAppointmentAction } from './actions/update_appointment';
 import { DeleteAppointmentAction } from './actions/delete_appointment';
 import { MultiStepPlanAction } from './actions/multi_step_plan';
+import { ImportContactsAction } from './actions/import_contacts';
 
 // This is the single source of truth for all Agent capabilities.
 // To add a new module/capability, create a new Action file and add it here.
@@ -16,5 +17,6 @@ export const CLARITY_ACTIONS: Record<string, ClarityAction> = {
   create_appointment: CreateAppointmentAction,
   update_appointment: UpdateAppointmentAction,
   delete_appointment: DeleteAppointmentAction,
-  multi_step_plan: MultiStepPlanAction
+  multi_step_plan: MultiStepPlanAction,
+  import_google_contacts: ImportContactsAction
 };

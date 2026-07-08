@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { Users, Search, Plus, UserPlus, Clock, ChevronRight, FileText, Phone, Mail } from 'lucide-react';
+import { Users, Search, Plus, UserPlus, Clock, ChevronRight, FileText, Phone, Mail, CloudDownload, AlertCircle } from 'lucide-react';
 import { ingestMemory } from '@/lib/saule-core-client';
+import { fetchWithGoogleAuth } from '@/lib/google-api';
 import { useRouter } from 'next/navigation';
+import { setClarityContext } from '@/lib/clarity-context';
 
 export default function CustomersClient({ dict }: { dict: any }) {
   const { user } = useAuth();
@@ -18,6 +20,13 @@ export default function CustomersClient({ dict }: { dict: any }) {
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerDetails, setNewCustomerDetails] = useState('');
   const [newCustomerType, setNewCustomerType] = useState('Lead');
+
+  // Google Contacts Modal state
+  const [showContactsModal, setShowContactsModal] = useState(false);
+  const [contactsList, setContactsList] = useState<any[]>([]);
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [contactsError, setContactsError] = useState<string | null>(null);
 
   const fetchCustomers = async () => {
     if (!user) return;
@@ -49,6 +58,19 @@ export default function CustomersClient({ dict }: { dict: any }) {
       });
       
       setCustomers(uniqueCustomers);
+      
+      // Clarity Engine'e müşteri listesini bildir
+      setClarityContext({
+        module: 'customers',
+        title: 'Müşteri Listesi',
+        data: {
+          customers: uniqueCustomers.map((c: any) => {
+            const match = c.content.match(/\/(?:customer|müşteri)\s+([^-]+)/i);
+            return { id: c.id, name: match ? match[1].trim() : '?' };
+          }),
+          totalCount: uniqueCustomers.length
+        }
+      });
     } catch (err) {
       console.error("Failed to fetch customers:", err);
     } finally {
@@ -56,9 +78,89 @@ export default function CustomersClient({ dict }: { dict: any }) {
     }
   };
 
+  const handleOpenContactsModal = async () => {
+    setShowContactsModal(true);
+    setIsLoadingContacts(true);
+    setContactsError(null);
+    setContactsList([]);
+    setSelectedContacts([]);
+    try {
+      const res = await fetchWithGoogleAuth('https://people.googleapis.com/v1/people/me/connections?personFields=names,emailAddresses,phoneNumbers&pageSize=100');
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || 'Failed to fetch contacts');
+      }
+      setContactsList(data.connections || []);
+    } catch (err: any) {
+      console.error(err);
+      if (err.message?.includes('No Google access token') || err.message?.includes('Failed to refresh') || err.message?.includes('insufficient authentication scopes')) {
+        setContactsError('Google hesabınızın kişi okuma izni eksik. Lütfen Entegrasyonlar sayfasından Google bağlantınızı kesip tekrar bağlayın (Kişiler izni gereklidir).');
+      } else {
+        setContactsError('Kişiler yüklenirken bir hata oluştu: ' + err.message);
+      }
+    } finally {
+      setIsLoadingContacts(false);
+    }
+  };
+
   useEffect(() => {
     fetchCustomers();
+    
+    // Check if we should auto-open the import contacts modal
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('action') === 'import_google_contacts') {
+        handleOpenContactsModal();
+        // Remove the action from URL
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+      }
+    }
   }, [user]);
+
+  const handleImportContacts = async () => {
+    if (selectedContacts.length === 0 || !user) return;
+    setIsLoading(true);
+    setShowContactsModal(false);
+    try {
+      const token = await user.getIdToken();
+      
+      for (const resourceName of selectedContacts) {
+        const contact = contactsList.find(c => c.resourceName === resourceName);
+        if (!contact) continue;
+        
+        const name = contact.names?.[0]?.displayName || 'İsimsiz Kişi';
+        const phone = contact.phoneNumbers?.[0]?.value || '';
+        const email = contact.emailAddresses?.[0]?.value || '';
+        
+        let details = '';
+        if (phone) details += `Telefon: ${phone} `;
+        if (email) details += `E-posta: ${email} `;
+        
+        let finalContent = `/customer ${name} - Tip: Lead`;
+        if (details.trim()) {
+          finalContent += ` - Ek Bilgi: ${details.trim()} (Google Contacts'ten aktarıldı)`;
+        } else {
+          finalContent += ` - Ek Bilgi: (Google Contacts'ten aktarıldı)`;
+        }
+
+        await ingestMemory(
+          finalContent,
+          'action',
+          { source: 'customers_page_import', author: user.uid, createdAt: Date.now() },
+          'fact',
+          'personal',
+          user.uid,
+          token
+        );
+      }
+      await fetchCustomers();
+    } catch (err) {
+      console.error("Failed to import contacts:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,13 +233,22 @@ export default function CustomersClient({ dict }: { dict: any }) {
               </div>
               <h1 className="text-3xl font-bold text-[var(--color-ink)] tracking-tight">{dict.customers.title}</h1>
             </div>
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 bg-[var(--color-burnt-orange)] text-white px-5 py-2.5 rounded-xl font-medium hover:bg-orange-600 transition-colors shadow-sm"
-            >
-              <Plus size={18} />
-              <span>{dict.customers.add_new}</span>
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={handleOpenContactsModal}
+                className="flex items-center gap-2 bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-5 py-2.5 rounded-xl font-medium hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors shadow-sm"
+              >
+                <CloudDownload size={18} />
+                <span className="hidden sm:inline">Google'dan Aktar</span>
+              </button>
+              <button 
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-2 bg-[var(--color-burnt-orange)] text-white px-5 py-2.5 rounded-xl font-medium hover:bg-orange-600 transition-colors shadow-sm"
+              >
+                <Plus size={18} />
+                <span>{dict.customers.add_new}</span>
+              </button>
+            </div>
           </div>
           <p className="text-[var(--color-ink-light)] text-lg">
             {dict.customers.subtitle}
@@ -305,6 +416,103 @@ export default function CustomersClient({ dict }: { dict: any }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Google Contacts Modal */}
+      {showContactsModal && (
+        <div className="fixed inset-0 bg-[var(--color-ink)]/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--color-paper)] rounded-3xl p-8 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 fade-in duration-200 max-h-[85vh] flex flex-col">
+            <h2 className="text-2xl font-bold text-[var(--color-ink)] mb-2 flex items-center gap-2">
+              <CloudDownload className="text-[var(--color-burnt-orange)]" /> Google Contacts
+            </h2>
+            <p className="text-sm text-[var(--color-ink-light)] mb-6">Rehberinizdeki kişileri seçerek müşteri listenize aktarabilirsiniz.</p>
+            
+            {isLoadingContacts ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--color-burnt-orange)] mb-4"></div>
+                <p className="text-[var(--color-ink-light)]">Google Contacts yükleniyor...</p>
+              </div>
+            ) : contactsError ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-8">
+                <AlertCircle size={48} className="text-red-500 mb-4" />
+                <p className="text-center text-[var(--color-ink)] font-medium mb-6 max-w-md">{contactsError}</p>
+                <button 
+                  onClick={() => router.push('/tr/app/integrations')}
+                  className="bg-[var(--color-burnt-orange)] text-white px-6 py-2.5 rounded-xl font-medium hover:bg-orange-600 transition-colors"
+                >
+                  Entegrasyonlara Git
+                </button>
+              </div>
+            ) : contactsList.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-12 text-[var(--color-ink-light)]">
+                Rehberinizde kişi bulunamadı.
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto min-h-0 border border-[var(--color-ink)]/10 rounded-xl bg-white mb-6">
+                <div className="divide-y divide-[var(--color-ink)]/5">
+                  <label className="flex items-center gap-3 p-4 hover:bg-[var(--color-ink)]/5 cursor-pointer bg-gray-50 font-medium border-b border-[var(--color-ink)]/10">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded text-[var(--color-burnt-orange)] focus:ring-[var(--color-burnt-orange)]"
+                      checked={selectedContacts.length === contactsList.length && contactsList.length > 0}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedContacts(contactsList.map(c => c.resourceName));
+                        else setSelectedContacts([]);
+                      }}
+                    />
+                    Tümünü Seç ({contactsList.length})
+                  </label>
+                  {contactsList.map(contact => {
+                    const name = contact.names?.[0]?.displayName || 'İsimsiz Kişi';
+                    const phone = contact.phoneNumbers?.[0]?.value || '';
+                    const email = contact.emailAddresses?.[0]?.value || '';
+                    const isChecked = selectedContacts.includes(contact.resourceName);
+                    
+                    return (
+                      <label key={contact.resourceName} className="flex items-center gap-4 p-4 hover:bg-[var(--color-burnt-orange)]/5 transition-colors cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) setSelectedContacts(prev => prev.filter(id => id !== contact.resourceName));
+                            else setSelectedContacts(prev => [...prev, contact.resourceName]);
+                          }}
+                          className="w-4 h-4 rounded text-[var(--color-burnt-orange)] focus:ring-[var(--color-burnt-orange)]"
+                        />
+                        <div className="w-10 h-10 rounded-full bg-[var(--color-ink)]/5 flex items-center justify-center text-[var(--color-ink)] font-bold text-sm shrink-0">
+                          {name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-[var(--color-ink)] truncate">{name}</div>
+                          <div className="text-xs text-[var(--color-ink-light)] truncate">
+                            {phone} {phone && email ? '•' : ''} {email}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-3 mt-auto shrink-0 pt-4 border-t border-[var(--color-ink)]/10">
+              <button
+                type="button"
+                onClick={() => setShowContactsModal(false)}
+                className="px-5 py-2.5 rounded-xl font-medium text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5 transition-colors"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                disabled={selectedContacts.length === 0 || isLoadingContacts || !!contactsError}
+                onClick={handleImportContacts}
+                className="px-5 py-2.5 rounded-xl font-medium bg-[var(--color-burnt-orange)] text-white hover:bg-orange-600 transition-colors disabled:opacity-50"
+              >
+                Seçilenleri Aktar ({selectedContacts.length})
+              </button>
+            </div>
           </div>
         </div>
       )}

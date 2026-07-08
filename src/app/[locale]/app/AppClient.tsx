@@ -8,6 +8,7 @@ import { ClarityResponse, ingestMemory, recallContext, getVerifiedSolutions } fr
 import { db } from '@/lib/firebase';
 import { collection, query as firestoreQuery, where, getDocs, addDoc } from 'firebase/firestore';
 import { LogoIcon } from '@/components/Logo';
+import { subscribeToClarityContext, formatClarityContextForLLM } from '@/lib/clarity-context';
 
 import { AuthModal } from '@/components/AuthModal';
 import { auth } from '@/lib/firebase';
@@ -15,8 +16,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { fetchWithGoogleAuth } from '@/lib/google-api';
 import { CLARITY_ACTIONS } from '@/lib/clarity-actions/registry';
 
-import CustomerDetailClient from './customers/[id]/CustomerDetailClient';
 import AppointmentsClient from './appointments/AppointmentsClient';
+import CustomersClient from './customers/CustomersClient';
+import CustomerDetailClient from './customers/[id]/CustomerDetailClient';
 
 export default function AppClient({ dict }: { dict: any }) {
   const router = useRouter();
@@ -53,11 +55,17 @@ export default function AppClient({ dict }: { dict: any }) {
   type AppTab = {
     id: string;
     title: string;
-    type: 'customer' | 'appointments' | 'notes' | 'docs';
+    type: 'customer' | 'customers' | 'appointments' | 'notes' | 'docs';
     payload?: any;
   };
   const [tabs, setTabs] = useState<AppTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+
+  // Clarity Engine — Konuşma Geçmişi
+  type ChatMessage = { role: 'user' | 'model'; content: string };
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  // Kullanıcının baktığı ekranın bağlamı (clarity-context store'dan)
+  const [activeContextString, setActiveContextString] = useState<string>('');
 
   const openTab = (tab: AppTab) => {
     setTabs(prev => {
@@ -83,6 +91,14 @@ export default function AppClient({ dict }: { dict: any }) {
     setTabs([]);
     setActiveTabId(null);
   };
+
+  // Subscribe to ClarityContext — sayfa motordan bağlamını gönderir
+  useEffect(() => {
+    const unsub = subscribeToClarityContext(() => {
+      setActiveContextString(formatClarityContextForLLM());
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -367,12 +383,11 @@ export default function AppClient({ dict }: { dict: any }) {
       // 3. Get Verified Solutions
       const verified = await getVerifiedSolutions(composition);
 
+      // ── Tüm Saule node'larını filtre OLMADAN Gemini'ye gönder ──────────────
+      // JS keyword filtresi kaldırıldı — Saule'nin semantik aramasına güveniyoruz
+      const allContextNodes = composition.nodes || [];
 
-
-      // Get significant words for matching (length > 3) to avoid false positives with common short words
-      const queryWords = currentQuery.toLowerCase().split(' ').filter(w => w.length > 3);
-
-      // 4. Fetch Terminal 2.0 Memories from Firebase
+      // Firebase memories (eski Terminal 2.0 uyumluluğu için)
       let firebaseMemories: any[] = [];
       if (user && db) {
         try {
@@ -381,64 +396,15 @@ export default function AppClient({ dict }: { dict: any }) {
             where('userId', '==', user.uid)
           );
           const snapshot = await getDocs(q);
-          
           snapshot.forEach(doc => {
-            const data = doc.data();
-            const content = (data.content || '').toLowerCase();
-            // Stricter matching: require at least one significant word to match, or exact match if query is very short
-            const matches = queryWords.length > 0 
-              ? queryWords.some(w => content.includes(w))
-              : content.includes(currentQuery.toLowerCase());
-              
-            if (matches) {
-              firebaseMemories.push({
-                content: data.content,
-                category: data.category || 'knowledge'
-              });
-            }
+            firebaseMemories.push({ content: doc.data().content, category: doc.data().category || 'knowledge' });
           });
         } catch (err) {
           console.error("Firebase fetch error:", err);
         }
       }
 
-      // 5. Filter local composition nodes using the same stricter logic
-      const validLocalNodes = composition.nodes.filter((n: any) => {
-        const content = (n.content || '').toLowerCase();
-        return queryWords.length > 0 
-          ? queryWords.some(w => content.includes(w))
-          : content.includes(currentQuery.toLowerCase());
-      });
-
-      const combinedNodes = [...validLocalNodes, ...firebaseMemories];
-
-      // Auto-open Customer Tab if a specific customer is highly relevant to the query
-      const customerNodes = validLocalNodes.filter((n: any) => n.content?.toLowerCase().startsWith('/customer') || n.content?.toLowerCase().startsWith('/müşteri'));
-      if (customerNodes.length === 1) {
-         const match = customerNodes[0].content.match(/\/(?:customer|müşteri)\s+([^-]+)/i);
-         const customerName = match ? match[1].trim() : 'Müşteri';
-         openTab({
-           id: `customer-${customerNodes[0].id}`,
-           title: customerName,
-           type: 'customer'
-         });
-      }
-
-      // Auto-open Appointments Tab if query is clearly about appointments
-      const isAppointmentQuery = currentQuery.toLowerCase().includes('randevu') || 
-                                 currentQuery.toLowerCase().includes('toplantı') || 
-                                 currentQuery.toLowerCase().includes('appointment') ||
-                                 currentQuery.toLowerCase().includes('meet');
-      if (isAppointmentQuery) {
-         openTab({
-           id: `appointments-module`,
-           title: `Randevular`,
-           type: 'appointments'
-         });
-      }
-
-      // Calculate Local Clarity Score based on SML Context
-      let localClarityScore = 0; // Start at 0, let Gemini decide the final score
+      const combinedNodes = [...allContextNodes, ...firebaseMemories];
 
       // Call Gemini API in the background to get synthesized context and answer
       setIsGenerating(true);
@@ -452,6 +418,9 @@ export default function AppClient({ dict }: { dict: any }) {
         }
       }
 
+      // Kullanıcının bu sorguyu chatHistory'ye ekle
+      const userMessage = { role: 'user' as const, content: currentQuery };
+      
       fetch('/api/gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -465,6 +434,8 @@ export default function AppClient({ dict }: { dict: any }) {
             if (text.startsWith('/note')) return `[KAYITLI NOT${idTag}]: ${text.replace(/^\/note/i, '').trim()}`;
             return text;
           }).join('\n'),
+          chatHistory,         // ← Konuşma geçmişi
+          activeContext: activeContextString, // ← Kullanıcının baktığı ekran
           pendingAction: results?.actionProposal || null,
           localTime: new Date().toLocaleString('tr-TR', { timeZoneName: 'short' }),
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -475,13 +446,38 @@ export default function AppClient({ dict }: { dict: any }) {
       }).then(res => res.json())
         .then(data => {
           if (data.answer) setAiResponse(data.answer);
+          
+          // Konuşma geçmişini güncelle
+          if (data.answer) {
+            setChatHistory(prev => [
+              ...prev.slice(-20), // Son 20 mesajı tut (token tasarrufu)
+              { role: 'user', content: currentQuery },
+              { role: 'model', content: data.answer }
+            ]);
+          }
+          
+          // Handle AI-driven UI Routing (route_ui tool or topic field)
+          if (data.topic === 'customers') {
+             openTab({
+               id: `customers-module`,
+               title: `Müşteriler`,
+               type: 'customers'
+             });
+          } else if (data.topic === 'appointments') {
+             openTab({
+               id: `appointments-module`,
+               title: `Randevular`,
+               type: 'appointments'
+             });
+          }
+          
           if (data.clarificationQuestions || data.clarityScore !== undefined) {
-            setResults(prev => {
-              if (!prev) return prev;
-              const score = data.clarityScore !== undefined ? data.clarityScore : prev.context.score;
-              let questions = data.clarificationQuestions || [];
-              
-              const newProposal = data.actionProposal || null;
+             setResults(prev => {
+               if (!prev) return prev;
+               const score = data.clarityScore !== undefined ? data.clarityScore : prev.context.score;
+               let questions = data.clarificationQuestions || [];
+               
+               const newProposal = data.actionProposal || null;
               if (newProposal) {
                 if (newProposal.type === 'create_customer') {
                   openTab({
@@ -606,7 +602,7 @@ export default function AppClient({ dict }: { dict: any }) {
           id: 'ctx-local',
           query: currentQuery,
           chips: ['Local WASM', 'Encrypted', 'Fast'],
-          score: localClarityScore
+          score: 0
         },
         clarificationChips: [], // Initially empty, will be updated by Gemini
         collectiveResults: [],
@@ -1193,6 +1189,7 @@ export default function AppClient({ dict }: { dict: any }) {
                         className={`absolute inset-0 p-6 overflow-y-auto transition-opacity duration-300 ${activeTabId === tab.id ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
                       >
                         {tab.type === 'customer' && <CustomerDetailClient dict={dict} id={tab.id.replace('customer-', '')} />}
+                        {tab.type === 'customers' && <CustomersClient dict={dict} />}
                         {tab.type === 'appointments' && <AppointmentsClient dict={dict} />}
                         {tab.type === 'notes' && <div className="p-8 text-center text-gray-500">Not Modülü Yapım Aşamasında</div>}
                         {tab.type === 'docs' && <div className="p-8 text-center text-gray-500">Döküman Modülü Yapım Aşamasında</div>}

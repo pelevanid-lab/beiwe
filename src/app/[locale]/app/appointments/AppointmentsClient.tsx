@@ -5,6 +5,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { Calendar as CalendarIcon, Search, Plus, Clock, CalendarPlus, User, X } from 'lucide-react';
 import { fetchWithGoogleAuth } from '@/lib/google-api';
 import { ingestMemory } from '@/lib/saule-core-client';
+import { setClarityContext } from '@/lib/clarity-context';
 import { Calendar, momentLocalizer, View, Views } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -208,6 +209,24 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
       }
       
       setEvents(parsedEvents);
+      
+      // Clarity Engine'e randevu listesini bildir
+      const now = new Date();
+      const upcoming = parsedEvents.filter((e: any) => e.start >= now);
+      setClarityContext({
+        module: 'appointments',
+        title: 'Randevu Takvimi',
+        data: {
+          appointments: parsedEvents.map((e: any) => ({
+            id: e.id,
+            title: e.title,
+            start: e.start?.toISOString(),
+            customer: e.customer
+          })),
+          totalCount: parsedEvents.length,
+          upcomingCount: upcoming.length
+        }
+      });
 
     } catch (err) {
       console.error("Failed to fetch appointments:", err);

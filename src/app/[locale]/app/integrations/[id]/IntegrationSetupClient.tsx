@@ -51,7 +51,7 @@ export default function IntegrationSetupClient({ dict, integrationId }: { dict: 
       }
 
       const redirectUri = `${window.location.origin}/api/auth/google/callback`;
-      const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.readonly');
+      const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/contacts.readonly');
       
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
       
