@@ -9,8 +9,9 @@ import { Calendar, momentLocalizer, View, Views } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'moment/locale/tr';
+import 'moment/locale/ru';
+import 'moment/locale/uk';
 
-moment.locale('tr');
 const localizer = momentLocalizer(moment);
 
 export default function AppointmentsClient({ dict }: { dict: any }) {
@@ -31,9 +32,24 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
   const [createMeet, setCreateMeet] = useState(false);
   const [recurrence, setRecurrence] = useState('none');
 
+  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, event: any}>({ isOpen: false, event: null });
+
   // Calendar Control States
   const [currentView, setCurrentView] = useState<View>(Views.MONTH);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
+
+  useEffect(() => {
+    // Set moment locale based on dictionary
+    if (dict.appointments.calendar_today === "Today") {
+      moment.locale('en');
+    } else if (dict.appointments.calendar_today === "Сегодня") {
+      moment.locale('ru');
+    } else if (dict.appointments.calendar_today === "Сьогодні") {
+      moment.locale('uk');
+    } else {
+      moment.locale('tr');
+    }
+  }, [dict]);
 
   const fetchAppointments = async () => {
     if (!user) return;
@@ -110,7 +126,7 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
         } else {
            // Old format fallback
            const match = a.content.match(/\/(?:appointment|randevu)\s+([^-]+)/i);
-           title = match ? match[1].trim() : 'Bilinmeyen Randevu';
+           title = match ? match[1].trim() : dict.appointments.unknown_appointment;
         }
         
         let start = new Date(a.createdAt);
@@ -169,8 +185,8 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
           if (googleData.success && googleData.events) {
             const googleEvents = googleData.events.map((ge: any) => ({
               id: ge.id,
-              title: ge.summary || 'Google Etkinliği',
-              customer: 'Google Takvim',
+              title: ge.summary || dict.appointments.calendar_google_event,
+              customer: 'Google Calendar',
               recurrence: 'none',
               meetLink: ge.hangoutLink || '',
               start: new Date(ge.start.dateTime || ge.start.date),
@@ -206,7 +222,6 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
 
   const handleDeleteEvent = async (eventToDelete: any) => {
     if (!user || !eventToDelete) return;
-    if (!confirm("Bu randevuyu silmek istediğinize emin misiniz?")) return;
     
     setIsLoading(true);
     try {
@@ -219,9 +234,9 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               token: googleToken,
-              title: eventToDelete.customer && eventToDelete.customer !== 'Bilinmeyen Müşteri' 
+              title: eventToDelete.customer && eventToDelete.customer !== dict.customers.unknown_customer 
                      ? `${eventToDelete.customer} - ${eventToDelete.title}`
-                     : eventToDelete.title || 'Beiwe Randevusu',
+                     : eventToDelete.title || dict.appointments.beiwe_appointment,
               start: eventToDelete.start.toISOString()
             })
           });
@@ -256,7 +271,7 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
     
     setIsLoading(true);
     try {
-      const customerStr = customerName.trim() ? customerName.trim() : 'Bilinmeyen Müşteri';
+      const customerStr = customerName.trim() ? customerName.trim() : dict.customers.unknown_customer;
       let finalContent = `/appointment ${customerStr} - Konu: ${newTitle.trim()}`;
       
       let parsedDate = new Date();
@@ -279,9 +294,9 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
                headers: { 'Content-Type': 'application/json' },
                body: JSON.stringify({
                  token: googleToken,
-                 title: editingEvent.customer && editingEvent.customer !== 'Bilinmeyen Müşteri' 
+                 title: editingEvent.customer && editingEvent.customer !== dict.customers.unknown_customer 
                         ? `${editingEvent.customer} - ${editingEvent.title}`
-                        : editingEvent.title || 'Beiwe Randevusu',
+                        : editingEvent.title || 'Beiwe Appointment',
                  start: editingEvent.start.toISOString()
                })
              });
@@ -339,7 +354,7 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
       );
 
       // Yeni müşteri ise arka planda sessizce Müşteriler listesine de ekle
-      if (customerStr !== 'Bilinmeyen Müşteri' && !customersList.includes(customerStr)) {
+      if (customerStr !== dict.customers.unknown_customer && !customersList.includes(customerStr)) {
         await ingestMemory(
           `/customer ${customerStr}`,
           'action',
@@ -404,18 +419,18 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
               <div className="p-2.5 bg-[var(--color-burnt-orange)]/10 rounded-xl text-[var(--color-burnt-orange)]">
                 <CalendarIcon size={24} />
               </div>
-              <h1 className="text-3xl font-bold text-[var(--color-ink)] tracking-tight">Randevular</h1>
+              <h1 className="text-3xl font-bold text-[var(--color-ink)] tracking-tight">{dict.appointments.title}</h1>
             </div>
             <button 
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-2 bg-[var(--color-burnt-orange)] text-white px-5 py-2.5 rounded-xl font-medium hover:bg-orange-600 transition-colors shadow-sm"
             >
               <Plus size={18} />
-              <span>Yeni Randevu</span>
+              <span>{dict.appointments.add_new}</span>
             </button>
           </div>
           <p className="text-[var(--color-ink-light)] text-lg">
-            Yaklaşan etkinlikleriniz ve toplantılarınız
+            {dict.appointments.subtitle}
           </p>
         </header>
 
@@ -442,13 +457,13 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
               }}
               style={{ height: '100%' }}
               messages={{
-                next: "İleri",
-                previous: "Geri",
-                today: "Bugün",
-                month: "Ay",
-                week: "Hafta",
-                day: "Gün",
-                agenda: "Ajanda"
+                next: dict.appointments.calendar_next,
+                previous: dict.appointments.calendar_prev,
+                today: dict.appointments.calendar_today,
+                month: dict.appointments.calendar_month,
+                week: dict.appointments.calendar_week,
+                day: dict.appointments.calendar_day,
+                agenda: dict.appointments.calendar_agenda
               }}
               eventPropGetter={(event: any) => {
                 return {
@@ -471,10 +486,10 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
       {showAddModal && (
         <div className="fixed inset-0 bg-[var(--color-ink)]/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[var(--color-paper)] rounded-3xl p-8 w-full max-w-md shadow-2xl animate-in zoom-in-95 fade-in duration-200">
-            <h2 className="text-2xl font-bold text-[var(--color-ink)] mb-6">Yeni Randevu</h2>
+            <h2 className="text-2xl font-bold text-[var(--color-ink)] mb-6">{dict.appointments.add_modal_title}</h2>
             <form onSubmit={handleAddAppointment} className="space-y-4">
               <div className="relative">
-                <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">Müşteri Adı / Unvan</label>
+                <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">{dict.appointments.customer_label}</label>
                 <input
                   type="text"
                   value={customerName}
@@ -485,7 +500,7 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
                   onFocus={() => setShowCustomerDropdown(true)}
                   onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
                   className="w-full border-2 border-[var(--color-ink)]/10 rounded-xl px-4 py-3 focus:outline-none focus:border-[var(--color-burnt-orange)] text-[var(--color-ink)]"
-                  placeholder="Kayıtlılardan seç veya yeni yaz..."
+                  placeholder={dict.appointments.customer_placeholder}
                 />
                 
                 {/* Müşteri Combobox Dropdown */}
@@ -509,7 +524,7 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
                         onClick={() => setShowCustomerDropdown(false)}
                       >
                         <Plus size={16} />
-                        "{customerName}" kişisini yeni müşteri olarak ekle
+                        {dict.appointments.add_as_new.replace('{name}', customerName)}
                       </div>
                     )}
                   </div>
@@ -518,7 +533,7 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">
-                    Randevu Başlığı / Konu <span className="text-[var(--color-burnt-orange)]">*</span>
+                    {dict.appointments.title_label} <span className="text-[var(--color-burnt-orange)]">*</span>
                   </label>
                   <input
                     type="text"
@@ -526,12 +541,12 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
                     value={newTitle}
                     onChange={e => setNewTitle(e.target.value)}
                     className="w-full border-2 border-[var(--color-ink)]/10 rounded-xl px-4 py-3 focus:outline-none focus:border-[var(--color-burnt-orange)] text-[var(--color-ink)]"
-                    placeholder="Örn: Proje Sunumu"
+                    placeholder={dict.appointments.title_placeholder}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">
-                    Zaman (Tarih ve Saat) <span className="text-[var(--color-burnt-orange)]">*</span>
+                    {dict.appointments.time_label} <span className="text-[var(--color-burnt-orange)]">*</span>
                   </label>
                   <input
                     type="datetime-local"
@@ -543,18 +558,18 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">Tekrarlama (Senkronizasyon İçin)</label>
+                <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">{dict.appointments.recurrence_label}</label>
                 <select
                   value={recurrence}
                   onChange={e => setRecurrence(e.target.value)}
                   className="w-full border-2 border-[var(--color-ink)]/10 rounded-xl px-4 py-3 focus:outline-none focus:border-[var(--color-burnt-orange)] text-[var(--color-ink)] bg-white"
                 >
-                  <option value="none">Tek Seferlik (Tekrar Yok)</option>
-                  <option value="Günlük">Her Gün (Günlük)</option>
-                  <option value="Gün Aşırı">Gün Aşırı</option>
-                  <option value="Haftalık">Her Hafta Aynı Gün</option>
-                  <option value="Aylık">Her Ay Aynı Gün</option>
-                  <option value="Yıllık">Her Yıl Aynı Gün</option>
+                  <option value="none">{dict.appointments.rec_none}</option>
+                  <option value="Günlük">{dict.appointments.rec_daily}</option>
+                  <option value="Gün Aşırı">{dict.appointments.rec_every_other_day}</option>
+                  <option value="Haftalık">{dict.appointments.rec_weekly}</option>
+                  <option value="Aylık">{dict.appointments.rec_monthly}</option>
+                  <option value="Yıllık">{dict.appointments.rec_yearly}</option>
                 </select>
               </div>
 
@@ -568,7 +583,7 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
                   className="w-5 h-5 text-[var(--color-burnt-orange)] rounded border-[var(--color-ink)]/20 focus:ring-[var(--color-burnt-orange)]"
                 />
                 <label htmlFor="createMeet" className="text-sm font-semibold text-[var(--color-ink)] cursor-pointer select-none">
-                  Google Meet Toplantı Bağlantısı Oluştur
+                  {dict.appointments.create_meet_label}
                 </label>
               </div>
 
@@ -585,14 +600,14 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
                   }}
                   className="px-5 py-2.5 rounded-xl font-medium text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5 transition-colors"
                 >
-                  İptal
+                  {dict.customers.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={!newTitle.trim()}
                   className="px-5 py-2.5 rounded-xl font-medium bg-[var(--color-burnt-orange)] text-white hover:bg-orange-600 transition-colors disabled:opacity-50"
                 >
-                  Kaydet
+                  {dict.customers.save}
                 </button>
               </div>
             </form>
@@ -616,7 +631,7 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
             <h2 className="text-xl font-bold text-[var(--color-ink)] mb-1 leading-tight">
               {selectedEvent.title}
             </h2>
-            {selectedEvent.customer && selectedEvent.customer !== 'Bilinmeyen Müşteri' && (
+            {selectedEvent.customer && selectedEvent.customer !== dict.customers.unknown_customer && (
               <p className="text-sm font-semibold text-[var(--color-ink-light)] mb-6 flex items-center gap-1.5">
                 <User size={14} /> {selectedEvent.customer}
               </p>
@@ -626,14 +641,14 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
               <div className="bg-white rounded-xl p-4 border border-[var(--color-ink)]/10 flex items-start gap-3 shadow-sm">
                  <Clock className="text-[var(--color-burnt-orange)] shrink-0 mt-0.5" size={18} />
                  <div>
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Zaman</p>
-                   <p className="text-sm font-medium text-[var(--color-ink)]">{selectedEvent.start.toLocaleString('tr-TR')}</p>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">{dict.appointments.time_title}</p>
+                   <p className="text-sm font-medium text-[var(--color-ink)]">{selectedEvent.start.toLocaleString(typeof navigator !== 'undefined' && navigator.language.includes('en') ? 'en-US' : 'tr-TR')}</p>
                  </div>
               </div>
               {selectedEvent.meetLink && (
                 <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 shadow-sm flex flex-col gap-3">
                    <div className="flex items-center gap-2 text-blue-600 font-semibold text-sm">
-                     <CalendarIcon size={18} /> Google Meet Odası
+                     <CalendarIcon size={18} /> {dict.appointments.meet_room}
                    </div>
                    <a 
                      href={selectedEvent.meetLink} 
@@ -641,7 +656,7 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
                      rel="noopener noreferrer"
                      className="block w-full text-center py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
                    >
-                     Toplantıya Katıl
+                     {dict.appointments.join_meet}
                    </a>
                 </div>
               )}
@@ -649,16 +664,16 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
             
             <div className="mt-6 pt-6 border-t border-[var(--color-ink)]/5 flex items-center justify-between">
                <button 
-                 onClick={() => handleDeleteEvent(selectedEvent)}
+                 onClick={() => setConfirmModal({ isOpen: true, event: selectedEvent })}
                  className="px-4 py-2 text-sm font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
                >
-                 Sil
+                 {dict.appointments.delete}
                </button>
                <button 
                  onClick={() => {
                     setEditingEvent(selectedEvent);
                     setNewTitle(selectedEvent.title);
-                    setCustomerName(selectedEvent.customer !== 'Bilinmeyen Müşteri' ? selectedEvent.customer : '');
+                    setCustomerName(selectedEvent.customer !== dict.customers.unknown_customer ? selectedEvent.customer : '');
                     setNewDate(moment(selectedEvent.start).format('YYYY-MM-DDTHH:mm'));
                     setRecurrence(selectedEvent.recurrence || 'none');
                     setCreateMeet(!!selectedEvent.meetLink);
@@ -667,8 +682,37 @@ export default function AppointmentsClient({ dict }: { dict: any }) {
                  }}
                  className="px-4 py-2 text-sm font-medium text-[var(--color-burnt-orange)] hover:bg-[var(--color-burnt-orange)]/10 rounded-lg transition-colors flex items-center gap-2"
                >
-                 Düzenle
+                 {dict.customers.editing}
                </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[var(--color-paper)] rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200 border border-[var(--color-ink)]/10">
+            <h3 className="text-xl font-bold text-[var(--color-ink)] mb-3">{dict.appointments.delete}</h3>
+            <p className="text-[var(--color-ink-light)] mb-8 leading-relaxed">
+              {dict.appointments.delete_confirm}
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button 
+                onClick={() => setConfirmModal({ isOpen: false, event: null })}
+                className="px-5 py-2.5 bg-[var(--color-ink)]/5 text-[var(--color-ink)] font-medium rounded-xl hover:bg-[var(--color-ink)]/10 transition-colors"
+              >
+                {dict.customers?.cancel || 'İptal'}
+              </button>
+              <button 
+                onClick={() => {
+                  handleDeleteEvent(confirmModal.event);
+                  setConfirmModal({ isOpen: false, event: null });
+                }}
+                className="px-5 py-2.5 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors flex items-center gap-2"
+              >
+                {dict.appointments.delete}
+              </button>
             </div>
           </div>
         </div>

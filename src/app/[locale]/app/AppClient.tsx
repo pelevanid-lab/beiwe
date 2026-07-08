@@ -13,6 +13,10 @@ import { AuthModal } from '@/components/AuthModal';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { fetchWithGoogleAuth } from '@/lib/google-api';
+import { CLARITY_ACTIONS } from '@/lib/clarity-actions/registry';
+
+import CustomerDetailClient from './customers/[id]/CustomerDetailClient';
+import AppointmentsClient from './appointments/AppointmentsClient';
 
 export default function AppClient({ dict }: { dict: any }) {
   const router = useRouter();
@@ -45,6 +49,41 @@ export default function AppClient({ dict }: { dict: any }) {
   const [pendingNoteText, setPendingNoteText] = useState('');
   const [customersList, setCustomersList] = useState<any[]>([]);
 
+  // Multi-Tab Workspace State
+  type AppTab = {
+    id: string;
+    title: string;
+    type: 'customer' | 'appointments' | 'notes' | 'docs';
+    payload?: any;
+  };
+  const [tabs, setTabs] = useState<AppTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+
+  const openTab = (tab: AppTab) => {
+    setTabs(prev => {
+      if (!prev.find(t => t.id === tab.id)) {
+        return [...prev, tab];
+      }
+      return prev;
+    });
+    setActiveTabId(tab.id);
+  };
+
+  const closeTab = (tabId: string) => {
+    setTabs(prev => {
+      const filtered = prev.filter(t => t.id !== tabId);
+      if (activeTabId === tabId) {
+        setActiveTabId(filtered.length > 0 ? filtered[filtered.length - 1].id : null);
+      }
+      return filtered;
+    });
+  };
+
+  const closeAllTabs = () => {
+    setTabs([]);
+    setActiveTabId(null);
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -62,6 +101,7 @@ export default function AppClient({ dict }: { dict: any }) {
   useEffect(() => {
     const q = searchParams.get('q');
     const queryParam = searchParams.get('query');
+    const isRestore = searchParams.get('restore');
     if (!user) return;
     
     // Fetch all nodes for live search
@@ -82,7 +122,33 @@ export default function AppClient({ dict }: { dict: any }) {
     };
     fetchNodes();
 
-    if (queryParam) {
+    if (isRestore) {
+      try {
+        const noteData = localStorage.getItem('clarity_restore_note');
+        if (noteData) {
+          const parsed = JSON.parse(noteData);
+          setQuery(parsed.originalQuery || '');
+          setResults({
+            actionProposal: undefined,
+            context: { id: 'history', query: parsed.originalQuery || '', chips: [], score: 100 },
+            clarificationChips: [],
+            collectiveResults: [],
+            contextResults: [],
+            registeredProducts: [],
+            webResults: [],
+            memories: []
+          });
+          setAiSynthesis(parsed.synthesis || null);
+          setAiResponse(parsed.actionResult ? `✅ Geçmiş İşlem Sonucu:\n- ${parsed.actionResult}` : (parsed.synthesis || 'Geçmiş işlem geri yüklendi.'));
+          setIsSearching(true);
+          hasAutoSearched.current = true;
+          // Clean up URL without triggering re-render loop
+          router.replace('/tr/app');
+        }
+      } catch (err) {
+        console.error("Restore failed:", err);
+      }
+    } else if (queryParam) {
       setQuery(queryParam);
       setTimeout(() => {
         handleSearch(undefined, queryParam);
@@ -180,12 +246,38 @@ export default function AppClient({ dict }: { dict: any }) {
     // Command Parsing
     setActiveIframeUrl(null);
     if (finalQuery.startsWith('/customer ')) {
-       // Müşteri eklendiğinde workspace'i DEĞİŞTİRMİYORUZ. 
-       // Workspace (Çalışma alanı) sadece takım/kişisel ayrımı içindir.
+       const customerName = finalQuery.replace('/customer ', '').trim();
+       const matchedNode = allNodes.find(n => n.content === finalQuery || n.content.includes(customerName));
+       if (matchedNode) {
+         openTab({
+           id: `customer-${matchedNode.id}`,
+           title: customerName,
+           type: 'customer'
+         });
+       } else {
+         // Fallback if ID is not immediately known, try to find it from context or just open a generic customer tab
+         openTab({
+           id: `customer-search-${Date.now()}`,
+           title: customerName,
+           type: 'customer'
+         });
+       }
        setQuery('');
        setResults(null);
        setIsSearching(false);
        return; 
+    }
+
+    if (finalQuery.startsWith('/appointments') || finalQuery.startsWith('/randevular')) {
+       openTab({
+         id: `appointments-module`,
+         title: `Randevular`,
+         type: 'appointments'
+       });
+       setQuery('');
+       setResults(null);
+       setIsSearching(false);
+       return;
     }
     
     if (finalQuery.startsWith('/new-customer ')) {
@@ -320,11 +412,46 @@ export default function AppClient({ dict }: { dict: any }) {
 
       const combinedNodes = [...validLocalNodes, ...firebaseMemories];
 
+      // Auto-open Customer Tab if a specific customer is highly relevant to the query
+      const customerNodes = validLocalNodes.filter((n: any) => n.content?.toLowerCase().startsWith('/customer') || n.content?.toLowerCase().startsWith('/müşteri'));
+      if (customerNodes.length === 1) {
+         const match = customerNodes[0].content.match(/\/(?:customer|müşteri)\s+([^-]+)/i);
+         const customerName = match ? match[1].trim() : 'Müşteri';
+         openTab({
+           id: `customer-${customerNodes[0].id}`,
+           title: customerName,
+           type: 'customer'
+         });
+      }
+
+      // Auto-open Appointments Tab if query is clearly about appointments
+      const isAppointmentQuery = currentQuery.toLowerCase().includes('randevu') || 
+                                 currentQuery.toLowerCase().includes('toplantı') || 
+                                 currentQuery.toLowerCase().includes('appointment') ||
+                                 currentQuery.toLowerCase().includes('meet');
+      if (isAppointmentQuery) {
+         openTab({
+           id: `appointments-module`,
+           title: `Randevular`,
+           type: 'appointments'
+         });
+      }
+
       // Calculate Local Clarity Score based on SML Context
       let localClarityScore = 0; // Start at 0, let Gemini decide the final score
 
       // Call Gemini API in the background to get synthesized context and answer
       setIsGenerating(true);
+      
+      let token;
+      if (user) {
+        try {
+          token = await user.getIdToken();
+        } catch (e) {
+          console.error("Failed to get user token", e);
+        }
+      }
+
       fetch('/api/gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -332,14 +459,18 @@ export default function AppClient({ dict }: { dict: any }) {
           query: currentQuery, 
           context: combinedNodes.map(n => {
             const text = n.content || '';
-            if (text.startsWith('/customer')) return `[KAYITLI MÜŞTERİ]: ${text.replace(/^\/customer/i, '').trim()}`;
-            if (text.startsWith('/appointment')) return `[KAYITLI RANDEVU]: ${text.replace(/^\/appointment/i, '').trim()}`;
-            if (text.startsWith('/note')) return `[KAYITLI NOT]: ${text.replace(/^\/note/i, '').trim()}`;
+            const idTag = n.id ? ` [ID: ${n.id}]` : '';
+            if (text.startsWith('/customer')) return `[KAYITLI MÜŞTERİ${idTag}]: ${text.replace(/^\/customer/i, '').trim()}`;
+            if (text.startsWith('/appointment')) return `[KAYITLI RANDEVU${idTag}]: ${text.replace(/^\/appointment/i, '').trim()}`;
+            if (text.startsWith('/note')) return `[KAYITLI NOT${idTag}]: ${text.replace(/^\/note/i, '').trim()}`;
             return text;
           }).join('\n'),
           pendingAction: results?.actionProposal || null,
           localTime: new Date().toLocaleString('tr-TR', { timeZoneName: 'short' }),
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          userId: user?.uid,
+          token: token,
+          activeWorkspace: activeWorkspace
         })
       }).then(res => res.json())
         .then(data => {
@@ -350,9 +481,38 @@ export default function AppClient({ dict }: { dict: any }) {
               const score = data.clarityScore !== undefined ? data.clarityScore : prev.context.score;
               let questions = data.clarificationQuestions || [];
               
+              const newProposal = data.actionProposal || null;
+              if (newProposal) {
+                if (newProposal.type === 'create_customer') {
+                  openTab({
+                    id: `customer-pending`,
+                    title: newProposal.payload?.name || 'Yeni Müşteri (Taslak)',
+                    type: 'customer'
+                  });
+                } else if (newProposal.type === 'create_appointment' || newProposal.type === 'update_appointment' || newProposal.type === 'delete_appointment') {
+                  openTab({
+                    id: `appointments-module`,
+                    title: `Randevular`,
+                    type: 'appointments'
+                  });
+                } else if (newProposal.type === 'add_note' || newProposal.type === 'delete_note') {
+                  const customerName = newProposal.payload?.customer;
+                  if (customerName) {
+                    const targetNode = combinedNodes.find((n: any) => n.content?.toLowerCase().startsWith('/customer') && n.content?.toLowerCase().includes(customerName.toLowerCase()));
+                    if (targetNode) {
+                      openTab({
+                        id: `customer-${targetNode.id}`,
+                        title: customerName,
+                        type: 'customer'
+                      });
+                    }
+                  }
+                }
+              }
+
               return { 
                 ...prev, 
-                actionProposal: data.actionProposal || null,
+                actionProposal: newProposal,
                 context: {
                   ...prev.context,
                   score
@@ -361,6 +521,31 @@ export default function AppClient({ dict }: { dict: any }) {
               };
             });
           } else if (data.actionProposal) {
+             if (data.actionProposal.type === 'create_customer') {
+               openTab({
+                 id: `customer-pending`,
+                 title: data.actionProposal.payload?.name || 'Yeni Müşteri (Taslak)',
+                 type: 'customer'
+               });
+             } else if (data.actionProposal.type === 'create_appointment' || data.actionProposal.type === 'update_appointment' || data.actionProposal.type === 'delete_appointment') {
+               openTab({
+                 id: `appointments-module`,
+                 title: `Randevular`,
+                 type: 'appointments'
+               });
+             } else if (data.actionProposal.type === 'add_note' || data.actionProposal.type === 'delete_note') {
+               const customerName = data.actionProposal.payload?.customer;
+               if (customerName) {
+                 const targetNode = combinedNodes.find((n: any) => n.content?.toLowerCase().startsWith('/customer') && n.content?.toLowerCase().includes(customerName.toLowerCase()));
+                 if (targetNode) {
+                   openTab({
+                     id: `customer-${targetNode.id}`,
+                     title: customerName,
+                     type: 'customer'
+                   });
+                 }
+               }
+             }
              setResults(prev => prev ? { ...prev, actionProposal: data.actionProposal } : prev);
           }
 
@@ -519,203 +704,77 @@ export default function AppClient({ dict }: { dict: any }) {
         actionProposal: { ...prev.actionProposal!, buttonText: dict?.processing || "İşleniyor..." } 
       } : prev);
 
-      if (actionProposal.type === 'create_customer') {
-        let actionResultText = dict?.success_customer_added || "Müşteri başarıyla eklendi.";
-        await ingestMemory(
-          `/customer ${actionProposal.payload.name}`,
-          'action',
-          { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
-          'fact',
-          'personal',
-          user.uid,
-          token
-        );
+      const actionDef = CLARITY_ACTIONS[actionProposal.type];
+      
+      if (actionDef) {
+        const result = await actionDef.execute(actionProposal.payload, { 
+          user, 
+          token, 
+          activeWorkspace, 
+          currentQuery 
+        });
         
-        await ingestMemory(
-          `[ORIGINAL_QUERY] ${currentQuery}\n[SYNTHESIS] Müşteri veritabanında işlem yapıldı.\n[ACTION_RESULT] ${actionResultText}`,
-          'knowledge',
-          { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
-          'fact',
-          'personal',
-          user.uid,
-          token
-        );
-      } else if (actionProposal.type === 'create_appointment' || actionProposal.type === 'multi_step_plan' || actionProposal.type === 'update_appointment') {
-        let finalContent = `/appointment ${actionProposal.payload.customer} - Konu: ${actionProposal.payload.title}`;
-        finalContent += ` - Zaman: ${new Date(actionProposal.payload.start).toISOString()}`;
+        // Update Results to show success or error
+        setResults(prev => prev ? { 
+          ...prev, 
+          actionProposal: { 
+            ...prev.actionProposal!, 
+            buttonText: result.success ? "✅ İşlem Başarıyla Tamamlandı" : "❌ Bir Hata Oluştu" 
+          } 
+        } : prev);
         
-        let actionResultText = dict?.success_appointment_created ? `${dict.success_appointment_created}` : `Randevu atandı.`;
-        if (actionProposal.type === 'update_appointment') {
-          actionResultText = "Randevu başarıyla güncellendi.";
-        }
-        let googleMeetLink = "";
-
-        // Google Sync if connected
-        const googleToken = localStorage.getItem('google_access_token');
-        if (googleToken) {
-          try {
-            const googleRes = await fetchWithGoogleAuth('/api/calendar/events', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                token: googleToken,
-                appointment: {
-                  title: actionProposal.payload.title,
-                  customer: actionProposal.payload.customer,
-                  start: actionProposal.payload.start,
-                  end: new Date(new Date(actionProposal.payload.start).getTime() + 60*60*1000).toISOString(),
-                  recurrence: 'none',
-                  createMeet: actionProposal.payload.createMeet || false,
-                  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                }
-              })
-            });
-            const googleData = await googleRes.json();
-            if (googleData.success && googleData.hangoutLink) {
-               finalContent += ` - Meet: ${googleData.hangoutLink}`;
+        // Refresh context slightly
+        setTimeout(() => {
+          setResults(prev => prev ? { ...prev, actionProposal: undefined } : prev);
+          
+          if (result.success) {
+            setAiResponse(`✅ Harika! İşlemleri başarıyla tamamladım:\n- ${result.message}`);
+            
+            // Auto-open Tab Workspace based on action type
+            if (actionProposal.type === 'create_customer') {
+               const customerId = result.data?.id || `new-customer-${Date.now()}`;
+               closeTab('customer-pending');
+               setTimeout(() => {
+                 openTab({
+                   id: `customer-${customerId}`,
+                   title: actionProposal.payload.name || 'Yeni Müşteri',
+                   type: 'customer'
+                 });
+               }, 50);
+            } else if (actionProposal.type === 'create_appointment' || actionProposal.type === 'update_appointment' || actionProposal.type === 'delete_appointment') {
+               closeTab('appointments-module');
+               setTimeout(() => {
+                 openTab({
+                   id: `appointments-module`,
+                   title: `Randevular`,
+                   type: 'appointments'
+                 });
+               }, 100);
+            } else if (actionProposal.type === 'add_note' || actionProposal.type === 'delete_note') {
+               const customerName = actionProposal.payload?.customer;
+               if (customerName) {
+                 const targetNode = allNodes.find((n: any) => n.content?.toLowerCase().startsWith('/customer') && n.content?.toLowerCase().includes(customerName.toLowerCase()));
+                 if (targetNode) {
+                   closeTab(`customer-${targetNode.id}`);
+                   setTimeout(() => {
+                     openTab({
+                       id: `customer-${targetNode.id}`,
+                       title: customerName,
+                       type: 'customer'
+                     });
+                   }, 100);
+                 }
+               }
             }
-          } catch (err) {
-            console.error("Google Sync Error:", err);
+          } else {
+            setAiResponse(`❌ Üzgünüm, bir hata oluştu:\n- ${result.message}`);
           }
-
-          // Eğer güncelleme ise eski Google takvim etkinliğini sil
-          if (actionProposal.type === 'update_appointment' && actionProposal.payload.oldStart) {
-            try {
-              await fetch('/api/calendar/events', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  token: googleToken,
-                  title: actionProposal.payload.customer && actionProposal.payload.customer !== 'Bilinmeyen Müşteri' 
-                         ? `${actionProposal.payload.customer} - ${actionProposal.payload.title}`
-                         : actionProposal.payload.title || 'Beiwe Randevusu',
-                  start: new Date(actionProposal.payload.oldStart).toISOString()
-                })
-              });
-            } catch (err) {
-              console.error("Google Calendar Delete Error:", err);
-            }
-          }
-        }
-        
-        if (actionProposal.type === 'update_appointment' && actionProposal.payload.oldStart) {
-          await ingestMemory(
-            `/cancel_appointment ${actionProposal.payload.customer} - Zaman: ${new Date(actionProposal.payload.oldStart).toISOString()}`,
-            'action',
-            { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
-            'task',
-            'personal',
-            user.uid,
-            token
-          );
-        }
-
-        await ingestMemory(
-          finalContent,
-          'action',
-          { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
-          'task',
-          'personal',
-          user.uid,
-          token
-        );
-        
-        // Yeni müşteri ise arka planda sessizce ekle
-        if (!customersList.includes(actionProposal.payload.customer)) {
-          await ingestMemory(
-            `/customer ${actionProposal.payload.customer}`,
-            'action',
-            { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
-            'fact',
-            'personal',
-            user.uid,
-            token
-          );
-        }
-
-        // Asistan arama hafızasına yaz (Clarity Notes'da görünsün diye)
-        await ingestMemory(
-          `[ORIGINAL_QUERY] ${currentQuery}\n[SYNTHESIS] İşlem gerçekleştirildi.\n[ACTION_RESULT] ${actionResultText}`,
-          'knowledge',
-          { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
-          'fact',
-          'personal',
-          user.uid,
-          token
-        );
-      } else if (actionProposal.type === 'delete_appointment') {
-        const googleToken = localStorage.getItem('google_access_token');
-        if (googleToken && actionProposal.payload.oldStart) {
-          try {
-            await fetch('/api/calendar/events', {
-              method: 'DELETE',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                token: googleToken,
-                title: actionProposal.payload.customer && actionProposal.payload.customer !== 'Bilinmeyen Müşteri' 
-                       ? `${actionProposal.payload.customer} - ${actionProposal.payload.title}`
-                       : actionProposal.payload.title || 'Beiwe Randevusu',
-                start: new Date(actionProposal.payload.oldStart).toISOString()
-              })
-            });
-          } catch (err) {
-            console.error("Google Calendar Delete Error:", err);
-          }
-        }
-        
-        if (actionProposal.payload.oldStart) {
-          await ingestMemory(
-            `/cancel_appointment ${actionProposal.payload.customer} - Zaman: ${new Date(actionProposal.payload.oldStart).toISOString()}`,
-            'action',
-            { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
-            'task',
-            'personal',
-            user.uid,
-            token
-          );
-        }
-        
-        await ingestMemory(
-          `[ORIGINAL_QUERY] ${currentQuery}\n[SYNTHESIS] İşlem gerçekleştirildi.\n[ACTION_RESULT] Randevu başarıyla iptal edildi.`,
-          'knowledge',
-          { source: 'search_bar_auto', author: user.uid, createdAt: Date.now() },
-          'fact',
-          'personal',
-          user.uid,
-          token
-        );
+        }, 1500);
+      } else {
+        console.error("Unknown action type:", actionProposal.type);
       }
       
-      // Update Results to show success
-      setResults(prev => prev ? { 
-        ...prev, 
-        actionProposal: { 
-          ...prev.actionProposal!, 
-          buttonText: "✅ İşlem Başarıyla Tamamlandı" 
-        } 
-      } : prev);
-      
-      // Refresh context slightly
-      setTimeout(() => {
-        setResults(prev => prev ? { ...prev, actionProposal: undefined } : prev);
-        
-        // Asistanın cevabını işlem sonucuyla güncelle
-        let successMessage = "✅ Harika! İşlemleri başarıyla tamamladım:\n";
-        if (actionProposal.type === 'create_customer') {
-          successMessage += `- ${actionProposal.payload.name} isimli müşteri kaydedildi.`;
-        } else if (actionProposal.type === 'create_appointment' || actionProposal.type === 'multi_step_plan') {
-          successMessage += `- ${actionProposal.payload.customer} isimli müşteri kaydedildi.\n`;
-          successMessage += `- ${new Date(actionProposal.payload.start).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} tarihi için randevu oluşturuldu.`;
-          if (actionProposal.payload.createMeet) {
-            successMessage += `\n- Google Meet etkinliği eklendi ve takvimle senkronize edildi.`;
-          }
-        } else if (actionProposal.type === 'delete_appointment') {
-          successMessage += `- ${actionProposal.payload.customer} isimli müşterinin randevusu iptal edildi.`;
-        }
-        setAiResponse(successMessage);
-        
-        setQuery('');
-      }, 2500);
+      setQuery('');
       
     } catch (err) {
       console.error("Execute action error", err);
@@ -1007,37 +1066,10 @@ export default function AppClient({ dict }: { dict: any }) {
                                   {dict?.awaiting_approval || "Onay Bekleniyor"}
                                 </h5>
                                 <div className="text-sm text-[var(--color-ink-light)] mb-3">
-                                  {results.actionProposal.type === 'multi_step_plan' ? (
-                                    <div className="flex flex-col gap-2 mt-2">
-                                      {results.actionProposal.steps?.map((step, idx) => (
-                                        <div key={idx} className="flex items-start gap-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                          <div className="w-5 h-5 rounded-full bg-[var(--color-burnt-orange)]/20 text-[var(--color-burnt-orange)] flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                                            {idx + 1}
-                                          </div>
-                                          <div>
-                                            <div className="font-bold text-[var(--color-ink)] text-xs mb-0.5">{step.title}</div>
-                                            <div className="text-xs text-[var(--color-ink-light)]">{step.description}</div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : results.actionProposal.type === 'create_appointment' ? (
-                                    <>
-                                      <span className="font-medium text-[var(--color-ink)]">{results.actionProposal.payload.customer}</span> ile <span className="font-medium text-[var(--color-ink)]">{new Date(results.actionProposal.payload.start).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> zamanında <span className="font-medium text-[var(--color-ink)]">"{results.actionProposal.payload.title}"</span> randevusu oluşturulacak. 
-                                      {results.actionProposal.payload.createMeet && " 🎥 Google Meet eklenecek."}
-                                    </>
-                                  ) : results.actionProposal.type === 'update_appointment' ? (
-                                    <>
-                                      <span className="font-medium text-[var(--color-ink)]">{results.actionProposal.payload.customer}</span> isimli müşterinin randevusu <span className="font-medium text-[var(--color-ink)]">{new Date(results.actionProposal.payload.start).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> zamanına güncellenecek.
-                                    </>
-                                  ) : results.actionProposal.type === 'delete_appointment' ? (
-                                    <>
-                                      <span className="font-medium text-[var(--color-ink)]">{results.actionProposal.payload.customer}</span> isimli müşterinin randevusu tamamen <strong>iptal edilecek</strong>.
-                                    </>
+                                  {CLARITY_ACTIONS[results.actionProposal.type] ? (
+                                    CLARITY_ACTIONS[results.actionProposal.type].renderUI(results.actionProposal.payload)
                                   ) : (
-                                    <>
-                                      <span className="font-medium text-[var(--color-ink)]">{results.actionProposal.payload.name}</span> isimli yeni bir müşteri kaydı oluşturulacak.
-                                    </>
+                                    <span>Tanımlanamayan eylem: {results.actionProposal.type}</span>
                                   )}
                                 </div>
                                 <button
@@ -1079,7 +1111,7 @@ export default function AppClient({ dict }: { dict: any }) {
                       if (user) {
                          const token = await user.getIdToken();
                          await ingestMemory(
-                           `Asistan: ${aiResponse || 'Detay istendi.'} | Kullanıcı Cevabı: ${questionAnswer}`,
+                           `[GEÇMİŞ İŞLEM]: ${query}\n[KULLANICI TALEBİ]: ${questionAnswer}`,
                            'action',
                            { source: 'clarification', author: 'user', createdAt: Date.now() },
                            'clarification',
@@ -1089,7 +1121,7 @@ export default function AppClient({ dict }: { dict: any }) {
                          );
                       }
 
-                      const combinedQuery = `${query} - Ek Bilgi: ${questionAnswer}`;
+                      const combinedQuery = `ÖNCEKİ BAĞLAM: ${query} | YENİ İSTEK: ${questionAnswer}`;
                       setQuery(combinedQuery);
                       handleSearch(undefined, combinedQuery);
                       setQuestionAnswer('');
@@ -1100,7 +1132,7 @@ export default function AppClient({ dict }: { dict: any }) {
                       <input 
                         type="text"
                         autoFocus
-                        placeholder="Asistana cevap verin veya bir detay ekleyin..."
+                        placeholder={dict.chat_input_placeholder || "Asistana cevap verin, bir detay ekleyin ya da yeni bir soru sorun..."}
                         value={questionAnswer}
                         onChange={(e) => setQuestionAnswer(e.target.value)}
                         className="w-full bg-transparent text-sm text-[var(--color-ink)] placeholder-[var(--color-ink-light)] focus:outline-none"
@@ -1117,7 +1149,60 @@ export default function AppClient({ dict }: { dict: any }) {
                 </div>
               </div>
 
-              <div className="space-y-10">
+              {/* MULTI-TAB WORKSPACE */}
+              {tabs.length > 0 && (
+                <div className="mt-8 flex flex-col h-[700px] bg-white rounded-3xl border border-[var(--color-ink)]/10 shadow-lg overflow-hidden">
+                  {/* Tab Bar */}
+                  <div className="flex items-center bg-[#f5f5f5] border-b border-[var(--color-ink)]/10 px-2 pt-2 gap-1 overflow-x-auto">
+                    {tabs.map(tab => (
+                      <div 
+                        key={tab.id}
+                        onClick={() => setActiveTabId(tab.id)}
+                        className={`group relative flex items-center gap-2 px-4 py-2.5 rounded-t-xl cursor-pointer select-none min-w-[150px] max-w-[250px] border border-b-0 transition-colors
+                          ${activeTabId === tab.id 
+                            ? 'bg-white border-[var(--color-ink)]/10 text-[var(--color-ink)] z-10 before:absolute before:-bottom-[1px] before:left-0 before:right-0 before:h-[1px] before:bg-white' 
+                            : 'bg-transparent border-transparent text-[var(--color-ink-light)] hover:bg-white/50 hover:text-[var(--color-ink)]'
+                          }`}
+                      >
+                        <div className="truncate flex-1 text-sm font-medium">
+                          {tab.title}
+                        </div>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                          className={`p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/5 transition-all
+                            ${activeTabId === tab.id ? 'opacity-100' : ''}`}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex-1" />
+                    <button 
+                      onClick={closeAllTabs}
+                      className="px-3 py-1.5 text-xs font-medium text-[var(--color-ink-light)] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors mr-2 mb-1"
+                    >
+                      Tümünü Kapat
+                    </button>
+                  </div>
+                  
+                  {/* Tab Content Area */}
+                  <div className="flex-1 overflow-y-auto bg-white relative p-6">
+                    {tabs.map(tab => (
+                      <div 
+                        key={tab.id} 
+                        className={`absolute inset-0 p-6 overflow-y-auto transition-opacity duration-300 ${activeTabId === tab.id ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
+                      >
+                        {tab.type === 'customer' && <CustomerDetailClient dict={dict} id={tab.id.replace('customer-', '')} />}
+                        {tab.type === 'appointments' && <AppointmentsClient dict={dict} />}
+                        {tab.type === 'notes' && <div className="p-8 text-center text-gray-500">Not Modülü Yapım Aşamasında</div>}
+                        {tab.type === 'docs' && <div className="p-8 text-center text-gray-500">Döküman Modülü Yapım Aşamasında</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className={`space-y-10 ${tabs.length > 0 ? 'hidden' : ''}`}>
                 {/* 2. Collective Results */}
                 {results.collectiveResults.length > 0 && (
                   <section className="space-y-4">

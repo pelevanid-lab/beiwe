@@ -1,7 +1,7 @@
-# Beiwe Kitabı
-### Çok Katmanlı Akıllı Çalışma Alanı Anayasası
+# Beiwe Book
+### Multi-Layered Smart Workspace Constitution
 
-*Versiyon 2.0*
+*Version 2.0*
 
 > "Beiwe için inşa edilen her şey bu kitaba uymak zorundadır."
 
@@ -9,34 +9,34 @@ Bu doküman bir pazarlama materyali değildir. Bir tasarım rehberi de değildir
 
 ---
 
-## Bölüm 1 — Beiwe Neden Var?
+## Chapter 1 — Why does Beiwe exist?
 *Why Beiwe Exists*
 
 **Amaç: Vizyon**
 
 > **Not:** Beiwe bir web tarayıcısı (browser) değildir. Tarayıcıların akışkan ve tanıdık arayüz dilini (sekme, komut çubuğu) kullanan, ancak amacı web'de gezinmek değil şirket verilerini yönetmek olan Çok Katmanlı bir Akıllı Çalışma Alanıdır (Workspace/OS).
 
-### Günümüz iş dünyasının problemi: Yazılım Yorgunluğu (SaaS Fatigue)
+### The problem of today's business world: Software Fatigue (SaaS Fatigue)
 Son on yılda yazılımlar şirketleri daha verimli yapmak için tasarlandı. Ancak bugün geldiğimiz noktada şirketler verimli değil, bölünmüş durumda. Müşteri verisi CRM'de, toplantılar takvimde, görevler proje yönetim aracında, faturalar finans uygulamasında parçalanmış halde duruyor. Bir kullanıcı bir işi çözmek için üç farklı uygulamayı açıp aralarında zihinsel bir efor harcamak zorunda kalıyor. Günümüz yazılımları bilgiyi dijitalleştirdi, ama bağlamı (context) öldürdü.
 
-### Statik Menü paradigmasının sınırları
+### The limits of the Static Menu paradigm
 Geleneksel yazılımlar tek bir varsayım üzerine kuruludur: Kullanıcı ne yapacağını ve menüde nereye tıklayacağını bilir. Ancak gerçek hayattaki işler menülere sığmaz. "Ahmet Bey'in dünkü randevusu neden iptal oldu?", "Şu an öncelikli görevim ne?" gibi sorular, statik sayfalara tıklayarak değil, veriler arasında bağ kurarak cevaplanabilir. Menüler pasiftir; kullanıcının tıklamasını bekler. Oysa modern bir çalışma alanı kullanıcının niyetine proaktif olarak uyum sağlamalıdır.
 
-### AI neden tek başına çözüm değil
+### Why AI is not a solution alone
 Yapay zekâ asistanları bu sorunu kısmen çözdü: Artık menülerde gezinmek yerine sisteme soru sorabiliyoruz. Ama bu da yeni bir yanıltmaca yarattı. Sohbet ekranı, iş yapmak için tasarlanmış bir arayüz (UI) değildir; sadece metin üretir. Kullanıcı sadece metin görmek değil, aynı zamanda işlem yapmak (randevu oluşturmak, faturayı ödemek) ister. Beiwe'nin reddettiği tam olarak budur: Yapay zekâ, sadece konuşulan soyut bir varlık değil, arayüzü kontrol eden bir yönlendirici (router) olmalıdır.
 
-### Context neden kayboluyor
+### Why context is getting lost
 Bugünün uygulamaları silolar halinde çalışır. Her sekme kendi başına bir adadır; birbirinden habersiz, birbirine bağlanmayan, oturum kapandığında yok olan geçici arayüz parçacıklarıdır. Kullanıcı dün girdiği müşteri notunu bugün takvime bağlayamaz, çünkü yazılımların ortak bir hafızası yoktur — sadece veritabanları vardır. Veritabanı ham bir kayıt defteridir, anlamlandırılmış bir bağlam değil.
 
-### Workspace neden yeniden tasarlanmalı
+### Why workspace should be redesigned
 Yazılım, otuz yıldır aynı temel metaforla çalışır: Üst menü, sol menü, formlar ve butonlar. Bu metafor, kullanıcının sisteme uyması üzerine kuruludur. Ama modern ihtiyaç artık kullanıcının yazılıma uyum sağlaması değil, yazılımın kullanıcının niyetine (intent) uyum sağlamasıdır. Arayüzün temel birimi artık "menü" değil, "niyet" olmalıdır. Bu, kozmetik bir güncelleme değil; çalışma alanının (workspace) kendisinin ne olduğuna dair kök bir yeniden tanımdır.
 
-### Clarity Engine (Netlik Motoru) Neden Kalbimizdir?
+### Why Clarity Engine is our heart?
 Beiwe devasa, çok katmanlı bir araçtır (CRM, İK, Finans). Bu kadar derin bir yapıda kaybolmamak için statik menüler yetersizdir. Beiwe'nin tek bir hedefi vardır: **Netlik**. Kullanıcının girdiği cümleyi anlayan, bağlamı süzen ve o an tam olarak hangi modüle (hangi sekmeye) ihtiyaç varsa onu anında kullanıcının önüne seren **Clarity Engine**, Beiwe'nin kalbidir. Bir özellik, kullanıcının zihnindeki karmaşayı azaltıp netliği artırmıyorsa, o özellik Beiwe'de yer almamalıdır.
 
 ---
 
-## Bölüm 2 — Manifesto
+## Chapter 2 — Manifesto
 *Manifesto*
 
 **Amaç: Felsefe**
@@ -69,7 +69,7 @@ Bu bölüm teknik değildir. İlham vericidir. Burada yazılanlar bir özellik l
 
 ---
 
-## Bölüm 3 — Netlik Modeli
+## Chapter 3 — Clarity Model
 *The Clarity Model*
 
 **Amaç: Ürün Mantığı**
@@ -93,24 +93,24 @@ Decision / Action (Karar ve Eylem)
 Memory (Saule Hafızası)
 ```
 
-### 1. Intent (Niyet)
+### 1. Intent
 Her şey bir cümle veya soruyla başlar — menüden bir butona tıklayarak değil. Kullanıcı "Ahmet'in randevusunu iptal et" yazdığı an, sistem iki paralel akışı aynı anda başlatır.
 
-### 2. System Awareness (Sıfır Sürtünme)
+### 2. System Awareness (Zero Friction)
 Eski modeldeki "önce sayfayı bul, sonra veriyi bul" mantığı terk edilmiştir. Cümle gelir gelmez, sistem arka planda hangi modüllerin (Takvim, CRM) ve hangi verilerin (Ahmet) kullanıldığını tespit eder. İlgili arayüz (sekme) **anında** kullanıcının görüş alanına açılır. Kullanıcı asla menü aramaz.
 
-### 3. Progressive Clarification (Kademeli Netleştirme)
+### 3. Progressive Clarification
 İlgili sekme açılırken, arka planda (Clarity Engine) eksik bağlamı doldurmak için netleştirme soruları veya eylem teklifleri belirir: "Ahmet Bey'in Salı günkü randevusunu iptal edip notlara ekleyeyim mi?". Bu adım, klasik yazılımların yapamadığı *bağlamı anlama* eylemidir.
 
-### 4. Decision & Action (Eylem)
+### 4. Decision & Action
 Kullanıcı sunulan teklifi onaylar. İşlem, arkada anında gerçekleşir ve açık olan modül canlı olarak güncellenir. Kullanıcı sonucun oluştuğunu fiziksel arayüzde görür.
 
-### 5. Memory (Hafıza)
+### 5. Memory
 Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bir sonraki soru veya işlem için yeni ve daha güçlü bir bağlam olarak saklanır.
 
 ---
 
-## Bölüm 4 — Workspace İlkeleri
+## Chapter 4 — Workspace Principles
 *Workspace Principles*
 
 **Amaç: Çalışma Alanı Davranışı**
@@ -123,7 +123,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Bölüm 5 — Ürün İlkeleri
+## Chapter 5 — Product Principles
 *Product Principles*
 
 **Amaç: Karar Mekanizması**
@@ -136,7 +136,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Bölüm 6 — Tasarım Dili
+## Chapter 6 — Design Language
 *Design Language*
 
 **Amaç: Görsel Sistem**
@@ -148,7 +148,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Bölüm 7 — Etkileşim Dili
+## Chapter 7 — Interaction Language
 *Interaction Language*
 
 **Amaç: Kullanıcı Akışı ve Sürtünme Yönetimi**
@@ -162,7 +162,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Bölüm 8 — Hareket Dili
+## Chapter 8 — Motion Language
 *Motion Language*
 
 **Amaç: Animasyon Sistemi**
@@ -171,7 +171,7 @@ Hareket, dikkat çekmek için değil, geçişleri anlamlandırmak için vardır.
 
 ---
 
-## Bölüm 9 — Saule Entegrasyonu
+## Chapter 9 — Saule Integration
 *Saule Integration*
 
 **Amaç: SML + Beiwe İlişkisi**
@@ -185,7 +185,7 @@ Hareket, dikkat çekmek için değil, geçişleri anlamlandırmak için vardır.
 3. **Zeka (Clarity Engine):** Beiwe, bu verileri seçilen Büyük Dil Modeli (LLM) sağlayıcısına sunar ve kullanıcının niyetini çözümleyip bir eylem teklifi (Action Proposal) yaratır. Clarity Engine, tek bir sağlayıcıya (Gemini, Claude, OpenAI vb.) bağımlı kalmayacak şekilde soyutlanmıştır.
 4. **Veri Yazma (Ingest):** Kullanıcı eylemi onayladığında, Beiwe `ingest` API'sini çağırarak bu kararı kalıcı bir "memory" (hafıza) düğümü olarak Saule'nin Semantic Memory Layer (SML) ağına yazar.
 
-### Soğuk Başlangıç (Cold Start) ve Tanışma
+### Cold Start and Onboarding
 Sistem ilk kurulduğunda SML veritabanı boştur. Bu "soğuk başlangıç" anında Beiwe'nin kullanıcıyı (ve şirketini) anlayabilmesi için, ilk kurulumda kısa bir "tanışma sohbeti" (Onboarding) yapılır. Şirketin sektörü, iş yapış biçimi ve öncelikleri bu sohbetle alınır ve doğrudan Saule'ye kaydedilir. Böylece ilk gerçek eylemde sistem sıfırdan başlamaz.
 
 *Saule hakkında daha detaylı bilgi için: [getsaule.com](https://getsaule.com)*
@@ -287,4 +287,4 @@ Beiwe bir netlik iddiasıdır. Herhangi bir özellik, ekran ya da satır kod gö
 
 ---
 
-*© 2026 PEH Solutions — Beiwe Kitabı ürünün evrimiyle birlikte "Çok Katmanlı Akıllı Çalışma Alanı" (Workspace/OS) anayasasına dönüştürülmüştür.*
+*© 2026 PEH Solutions — Beiwe Book ürünün evrimiyle birlikte "Çok Katmanlı Akıllı Çalışma Alanı" (Workspace/OS) anayasasına dönüştürülmüştür.*

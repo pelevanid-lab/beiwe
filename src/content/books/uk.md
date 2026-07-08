@@ -1,7 +1,7 @@
-# Beiwe Kitabı
-### Çok Katmanlı Akıllı Çalışma Alanı Anayasası
+# Книга Beiwe
+### Багаторівнева конституція розумної робочої області
 
-*Versiyon 2.0*
+*Версія 2.0*
 
 > "Beiwe için inşa edilen her şey bu kitaba uymak zorundadır."
 
@@ -9,7 +9,7 @@ Bu doküman bir pazarlama materyali değildir. Bir tasarım rehberi de değildir
 
 ---
 
-## Bölüm 1 — Beiwe Neden Var?
+## Розділ 1 — Чому існує Beiwe?
 *Why Beiwe Exists*
 
 **Amaç: Vizyon**
@@ -36,7 +36,7 @@ Beiwe devasa, çok katmanlı bir araçtır (CRM, İK, Finans). Bu kadar derin bi
 
 ---
 
-## Bölüm 2 — Manifesto
+## Розділ 2 — Маніфест
 *Manifesto*
 
 **Amaç: Felsefe**
@@ -69,7 +69,7 @@ Bu bölüm teknik değildir. İlham vericidir. Burada yazılanlar bir özellik l
 
 ---
 
-## Bölüm 3 — Netlik Modeli
+## Розділ 3 — Модель ясності
 *The Clarity Model*
 
 **Amaç: Ürün Mantığı**
@@ -110,7 +110,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Bölüm 4 — Workspace İlkeleri
+## Розділ 4 — Принципи робочої області
 *Workspace Principles*
 
 **Amaç: Çalışma Alanı Davranışı**
@@ -123,7 +123,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Bölüm 5 — Ürün İlkeleri
+## Розділ 5 — Принципи продукту
 *Product Principles*
 
 **Amaç: Karar Mekanizması**
@@ -136,7 +136,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Bölüm 6 — Tasarım Dili
+## Розділ 6 — Мова дизайну
 *Design Language*
 
 **Amaç: Görsel Sistem**
@@ -148,7 +148,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Bölüm 7 — Etkileşim Dili
+## Розділ 7 — Мова взаємодії
 *Interaction Language*
 
 **Amaç: Kullanıcı Akışı ve Sürtünme Yönetimi**
@@ -162,7 +162,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Bölüm 8 — Hareket Dili
+## Розділ 8 — Мова рухів
 *Motion Language*
 
 **Amaç: Animasyon Sistemi**
@@ -171,7 +171,7 @@ Hareket, dikkat çekmek için değil, geçişleri anlamlandırmak için vardır.
 
 ---
 
-## Bölüm 9 — Saule Entegrasyonu
+## Розділ 9 — Інтеграція Saule
 *Saule Integration*
 
 **Amaç: SML + Beiwe İlişkisi**
@@ -287,4 +287,4 @@ Beiwe bir netlik iddiasıdır. Herhangi bir özellik, ekran ya da satır kod gö
 
 ---
 
-*© 2026 PEH Solutions — Beiwe Kitabı ürünün evrimiyle birlikte "Çok Katmanlı Akıllı Çalışma Alanı" (Workspace/OS) anayasasına dönüştürülmüştür.*
+*© 2026 PEH Solutions — Книга Beiwe ürünün evrimiyle birlikte "Çok Katmanlı Akıllı Çalışma Alanı" (Workspace/OS) anayasasına dönüştürülmüştür.*

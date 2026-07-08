@@ -7,7 +7,7 @@
 
 ## 1. Logo Ailesi
 
-Beiwe'nin marka işareti tek bir fikre dayanır: **tek bir kesintisiz gövde içinde iki sessiz harf.** Kalın, tek parça bir "B" gövdesinin içinden turuncu bir "W" geçer. Harf ayrı bir dekorasyon değildir — B'nin etinden çıkar, ona kazınmıştır.
+Beiwe'nin marka işareti tek bir fikre dayanır: **tek bir kesintisiz gövde içinde iki sessiz harf.** Kalın, tek parça bir "B" gövdesinin içinden turuncu bir "W" geçer. Bu gizli dizilim aynı zamanda **"With Beiwe"** (Beiwe ile) felsefesini sembolize eder. Harf ayrı bir dekorasyon değildir — B'nin etinden çıkar, ona kazınmıştır.
 
 Üç birincil varyant vardır:
 

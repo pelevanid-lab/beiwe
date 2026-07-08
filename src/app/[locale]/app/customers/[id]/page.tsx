@@ -9,5 +9,5 @@ export default async function CustomerDetailPage({
   const { locale, id } = await params;
   const dict = await getDictionary(locale);
 
-  return <CustomerDetailClient dict={dict} id={id} />;
+  return <CustomerDetailClient dict={dict.app} id={id} />;
 }

@@ -17,6 +17,7 @@ export default function CustomersClient({ dict }: { dict: any }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerDetails, setNewCustomerDetails] = useState('');
+  const [newCustomerType, setNewCustomerType] = useState('Lead');
 
   const fetchCustomers = async () => {
     if (!user) return;
@@ -66,6 +67,9 @@ export default function CustomersClient({ dict }: { dict: any }) {
     setIsLoading(true);
     try {
       let finalContent = `/customer ${newCustomerName.trim()}`;
+      if (newCustomerType) {
+        finalContent += ` - Tip: ${newCustomerType}`;
+      }
       if (newCustomerDetails.trim()) {
         finalContent += ` - Ek Bilgi: ${newCustomerDetails.trim()}`;
       }
@@ -84,6 +88,7 @@ export default function CustomersClient({ dict }: { dict: any }) {
       setShowAddModal(false);
       setNewCustomerName('');
       setNewCustomerDetails('');
+      setNewCustomerType('Lead');
       // Reload
       await fetchCustomers();
     } catch (err) {
@@ -96,7 +101,7 @@ export default function CustomersClient({ dict }: { dict: any }) {
 
   const extractCustomerName = (content: string) => {
     const match = content.match(/\/(?:customer|müşteri)\s+([^-]+)/i);
-    return match ? match[1].trim() : 'Bilinmeyen Müşteri';
+    return match ? match[1].trim() : dict.customers.unknown_customer;
   };
 
   const extractCustomerDetails = (content: string) => {
@@ -104,6 +109,14 @@ export default function CustomersClient({ dict }: { dict: any }) {
       return content.split('- Ek Bilgi:')[1].trim();
     }
     return '';
+  };
+
+  const extractCustomerType = (content: string) => {
+    if (content.includes('- Tip:')) {
+      const match = content.match(/- Tip:\s*([^-]+)/i);
+      return match ? match[1].trim() : '-';
+    }
+    return '-';
   };
 
   return (
@@ -116,18 +129,18 @@ export default function CustomersClient({ dict }: { dict: any }) {
               <div className="p-2.5 bg-[var(--color-burnt-orange)]/10 rounded-xl text-[var(--color-burnt-orange)]">
                 <Users size={24} />
               </div>
-              <h1 className="text-3xl font-bold text-[var(--color-ink)] tracking-tight">Müşteriler</h1>
+              <h1 className="text-3xl font-bold text-[var(--color-ink)] tracking-tight">{dict.customers.title}</h1>
             </div>
             <button 
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-2 bg-[var(--color-burnt-orange)] text-white px-5 py-2.5 rounded-xl font-medium hover:bg-orange-600 transition-colors shadow-sm"
             >
               <Plus size={18} />
-              <span>Yeni Ekle</span>
+              <span>{dict.customers.add_new}</span>
             </button>
           </div>
           <p className="text-[var(--color-ink-light)] text-lg">
-            Ağınızdaki tüm müşteriler ve bağlantılar
+            {dict.customers.subtitle}
           </p>
         </header>
 
@@ -138,7 +151,7 @@ export default function CustomersClient({ dict }: { dict: any }) {
           </div>
           <input
             type="text"
-            placeholder="Müşterilerde ara..."
+            placeholder={dict.customers.search_placeholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-[var(--color-paper)] border-2 border-[var(--color-ink)]/10 rounded-2xl py-4 pl-12 pr-4 text-lg text-[var(--color-ink)] placeholder-[var(--color-ink)]/30 focus:outline-none focus:border-[var(--color-burnt-orange)] focus:ring-4 focus:ring-[var(--color-burnt-orange)]/10 transition-all shadow-sm"
@@ -155,10 +168,8 @@ export default function CustomersClient({ dict }: { dict: any }) {
         ) : filteredCustomers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-[var(--color-ink-light)] bg-white/50 rounded-3xl border-2 border-dashed border-[var(--color-ink)]/10">
             <UserPlus size={48} className="mb-4 opacity-50" />
-            <h3 className="text-xl font-medium text-[var(--color-ink)]">Müşteri bulunamadı</h3>
-            <p className="mt-2 text-center max-w-md">
-              Sağ üstteki düğmeyi kullanarak veya arama çubuğuna <strong>/customer Ahmet Bey</strong> yazarak ekleyebilirsiniz.
-            </p>
+            <h3 className="text-xl font-medium text-[var(--color-ink)]">{dict.customers.not_found}</h3>
+            <p className="mt-2 text-center max-w-md" dangerouslySetInnerHTML={{ __html: dict.customers.not_found_desc }} />
           </div>
         ) : (
           <div className="bg-white rounded-3xl border border-[var(--color-ink)]/5 shadow-sm overflow-hidden">
@@ -166,15 +177,17 @@ export default function CustomersClient({ dict }: { dict: any }) {
               <table className="w-full text-left">
                 <thead className="bg-[var(--color-ink)]/5 border-b border-[var(--color-ink)]/10">
                   <tr>
-                    <th className="px-6 py-4 text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">Müşteri</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">Ek Bilgi</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">Kayıt Tarihi</th>
-                    <th className="px-6 py-4 text-right text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">İşlemler</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">{dict.customers.col_customer}</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">{dict.customers.col_type}</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">{dict.customers.col_details}</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">{dict.customers.col_date}</th>
+                    <th className="px-6 py-4 text-right text-sm font-semibold text-[var(--color-ink-light)] uppercase tracking-wider">{dict.customers.col_actions}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-ink)]/5">
                   {filteredCustomers.map(c => {
                     const name = extractCustomerName(c.content);
+                    const type = extractCustomerType(c.content);
                     const details = extractCustomerDetails(c.content);
                     
                     return (
@@ -191,6 +204,11 @@ export default function CustomersClient({ dict }: { dict: any }) {
                             <div className="font-semibold text-[var(--color-ink)]">{name}</div>
                           </div>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${type === 'Lead' ? 'bg-blue-100 text-blue-800' : type === 'Consumer' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                            {type}
+                          </span>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-[var(--color-ink-light)] max-w-xs truncate">
                             {details || '-'}
@@ -204,7 +222,7 @@ export default function CustomersClient({ dict }: { dict: any }) {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">
                           <button className="text-[var(--color-burnt-orange)] opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-[var(--color-burnt-orange)]/10 rounded-lg inline-flex items-center gap-1 font-medium text-sm">
-                            Detay <ChevronRight size={16} />
+                            {dict.customers.detail_btn} <ChevronRight size={16} />
                           </button>
                         </td>
                       </tr>
@@ -221,26 +239,53 @@ export default function CustomersClient({ dict }: { dict: any }) {
       {showAddModal && (
         <div className="fixed inset-0 bg-[var(--color-ink)]/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[var(--color-paper)] rounded-3xl p-8 w-full max-w-md shadow-2xl animate-in zoom-in-95 fade-in duration-200">
-            <h2 className="text-2xl font-bold text-[var(--color-ink)] mb-6">Yeni Müşteri Ekle</h2>
+            <h2 className="text-2xl font-bold text-[var(--color-ink)] mb-6">{dict.customers.new_customer_title}</h2>
             <form onSubmit={handleAddCustomer} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">Müşteri Adı / Ünvanı</label>
+                <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">{dict.customers.name_label}</label>
                 <input
                   type="text"
                   required
                   value={newCustomerName}
                   onChange={e => setNewCustomerName(e.target.value)}
                   className="w-full border-2 border-[var(--color-ink)]/10 rounded-xl px-4 py-3 focus:outline-none focus:border-[var(--color-burnt-orange)] text-[var(--color-ink)]"
-                  placeholder="Örn: Ahmet Yılmaz"
+                  placeholder={dict.customers.name_placeholder}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">Ek Bilgiler (Opsiyonel)</label>
+                <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">{dict.customers.type_label}</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="customerType" 
+                      value="Lead" 
+                      checked={newCustomerType === 'Lead'} 
+                      onChange={() => setNewCustomerType('Lead')} 
+                      className="text-[var(--color-burnt-orange)] focus:ring-[var(--color-burnt-orange)]"
+                    />
+                    <span className="text-[var(--color-ink)]">Lead</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="customerType" 
+                      value="Consumer" 
+                      checked={newCustomerType === 'Consumer'} 
+                      onChange={() => setNewCustomerType('Consumer')} 
+                      className="text-[var(--color-burnt-orange)] focus:ring-[var(--color-burnt-orange)]"
+                    />
+                    <span className="text-[var(--color-ink)]">Consumer</span>
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">{dict.customers.details_label}</label>
                 <textarea
                   value={newCustomerDetails}
                   onChange={e => setNewCustomerDetails(e.target.value)}
                   className="w-full border-2 border-[var(--color-ink)]/10 rounded-xl px-4 py-3 focus:outline-none focus:border-[var(--color-burnt-orange)] text-[var(--color-ink)] min-h-[100px] resize-none"
-                  placeholder="Şirket, İletişim, Notlar..."
+                  placeholder={dict.customers.details_placeholder}
                 />
               </div>
               <div className="flex justify-end gap-3 mt-8">
@@ -249,14 +294,14 @@ export default function CustomersClient({ dict }: { dict: any }) {
                   onClick={() => setShowAddModal(false)}
                   className="px-5 py-2.5 rounded-xl font-medium text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5 transition-colors"
                 >
-                  İptal
+                  {dict.customers.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={!newCustomerName.trim()}
                   className="px-5 py-2.5 rounded-xl font-medium bg-[var(--color-burnt-orange)] text-white hover:bg-orange-600 transition-colors disabled:opacity-50"
                 >
-                  Kaydet
+                  {dict.customers.save}
                 </button>
               </div>
             </form>

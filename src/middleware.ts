@@ -7,7 +7,11 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/en/") ||
     pathname === "/en" ||
     pathname.startsWith("/tr/") ||
-    pathname === "/tr";
+    pathname === "/tr" ||
+    pathname.startsWith("/ru/") ||
+    pathname === "/ru" ||
+    pathname.startsWith("/uk/") ||
+    pathname === "/uk";
 
   if (pathnameHasLocale) return;
 

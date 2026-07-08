@@ -56,7 +56,7 @@ export type ActionStep = {
 };
 
 export type ActionProposal = {
-  type: 'create_customer' | 'create_appointment' | 'multi_step_plan' | 'update_appointment' | 'delete_appointment';
+  type: 'create_customer' | 'create_appointment' | 'multi_step_plan' | 'update_appointment' | 'delete_appointment' | 'add_note' | 'delete_note' | string;
   steps?: ActionStep[];
   payload: any;
   buttonText: string;
@@ -229,6 +229,39 @@ export async function ingestMemory(
   });
   if (!response.ok) throw new Error("Failed to ingest memory");
   return response.json();
+}
+
+export async function deleteNode(nodeId: string, token?: string) {
+  const apiUrl = process.env.NEXT_PUBLIC_SAULE_API_URL;
+  if (!apiUrl) throw new Error("NEXT_PUBLIC_SAULE_API_URL is not defined");
+
+  const startTime = Date.now();
+  console.log(`\n\x1b[36m[Saule API] DELETE /api/smi/nodes/${nodeId}\x1b[0m \x1b[90m(delete memory)\x1b[0m`);
+  
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  try {
+    const response = await fetch(`${apiUrl}/api/smi/nodes/${nodeId}`, {
+      method: 'DELETE',
+      headers
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete node: ${response.statusText}`);
+    }
+    
+    console.log(`\x1b[32m[Saule API] \x1b[0m✅ Node deleted in ${Date.now() - startTime}ms`);
+    return await response.json();
+  } catch (error) {
+    console.error(`\x1b[31m[Saule API] \x1b[0m❌ Error deleting node:`, error);
+    throw error;
+  }
 }
 
 export async function recallContext(query: string, spaceId: string, spaceType: string) {

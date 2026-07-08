@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType, FunctionDeclaration } from '@google/generative-ai';
+import { recallContext } from '@/lib/saule-core-client';
+import { CLARITY_ACTIONS } from '@/lib/clarity-actions/registry';
 
 // Initialize the Gemini API client
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: NextRequest) {
   try {
-    const { query, context, pendingAction, localTime, timeZone } = await req.json();
+    const { query, context, pendingAction, localTime, timeZone, userId, activeWorkspace } = await req.json();
 
     if (!query) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 });
@@ -17,104 +19,141 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Gemini API key is not configured.' }, { status: 500 });
     }
 
-    // We use gemini-2.5-flash as requested by the user
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    // Map Action Registry to Gemini Tools dynamically
+    const dynamicTools: FunctionDeclaration[] = Object.values(CLARITY_ACTIONS).map(action => ({
+      name: action.name,
+      description: action.description,
+      parameters: action.parameters
+    }));
 
-    const prompt = `Sen Beiwe isimli, kullanıcının kendi çalışma alanı (CRM, randevular, müşteriler, notlar) içinde çalışan zeki ve yetenekli bir "Kişisel Asistan"sın. 
-    
+    // Define the recall_saule_memory tool (System tool)
+    const recallSauleMemoryTool: FunctionDeclaration = {
+      name: 'recall_saule_memory',
+      description: 'Search the user\'s past notes, memories, and system context in Saule Core for a specific topic. Use this to remember things the user told you before if they are not in the current context.',
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          searchQuery: {
+            type: SchemaType.STRING,
+            description: 'The search term to look for in the user\'s memory.',
+          }
+        },
+        required: ['searchQuery']
+      }
+    };
+
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-2.5-flash',
+      tools: [
+        { functionDeclarations: [...dynamicTools, recallSauleMemoryTool] }
+      ],
+      systemInstruction: `Sen Beiwe isimli, kullanıcının çalışma alanında (CRM, randevular, notlar) çalışan zeki bir 'Kişisel Asistan' ve 'Clarity Engine'sin.
 Bugünün Tarihi ve Saati: ${localTime || new Date().toLocaleString('tr-TR')}
 Zaman Dilimi: ${timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone}
-Lütfen saat ve tarih hesaplamalarını kullanıcının bu yerel saatine ve zaman dilimine göre yap. Örneğin kullanıcı "yarın 15:00" diyorsa, bu zaman dilimine göre hesapla ve ona göre tarihleri YYYY-MM-DDTHH:mm:00 formatında, sonuna Z veya saat dilimi ofseti EKLEMEDEN (yalnızca yerel saati yansıtacak şekilde) döndür.
-Amacın, kullanıcının sistemindeki verileri yönetmesine yardımcı olmak, eylemler teklif etmek ve onaylamaktır.
-    
-Kullanıcının Sorusu/İsteği: "${query}"
 
-Aşağıdaki bilgiler, kullanıcının CRM sisteminden (yerel veritabanından) çekilmiş ilgili kayıtlardır (Bağlam):
---- YEREL BAĞLAM ---
-${context || 'Kullanıcının veritabanında bu isimle/konuyla ilgili bir kayıt bulunamadı.'}
---------------------
+Kullanıcının Sistemindeki Mevcut Bağlam (Veritabanı / Saule Hafızası):
+${context || 'Bağlam boş.'}
 
-${pendingAction ? `
---- BEKLEYEN AKSİYON TEKLİFİ (Önceki Hafıza) ---
-Kullanıcıya şu an sunduğun ve henüz onaylanmamış eylem:
-${JSON.stringify(pendingAction, null, 2)}
-Kullanıcının son mesajı ("${query}") büyük ihtimalle bu eylemi değiştirmek, düzeltmek (revizyon) veya onaylamak içindir. Eğer kullanıcı "Evet, Google Meet de ekle" veya "Saati 16:00 yap" diyorsa, bu bekleyen eylemi al ve istenen şekilde güncelleyip tekrar "actionProposal" olarak sun!
---------------------` : ''}
+${pendingAction ? `Bekleyen Eylem: ${JSON.stringify(pendingAction)}\nEğer kullanıcı bu eylemi onaylıyorsa (örn: 'evet', 'yap'), işlemi onaylanmış kabul et ve kullanıcıya işlemin yapıldığını söyle.` : ''}
 
-NASIL CEVAP VERMELİSİN? (DİKKAT: EN YÜKSEK ÖNCELİKLİ KURALLAR)
-1. ÇAKIŞMA KONTROLÜ VE GÜNCELLEME/SİLME: Eğer kullanıcının istediği işlem (Örn: randevu) zaten bağlamda varsa (aynı gün randevu varsa) VE kullanıcı sadece "randevu oluştur" diyorsa YENİ EYLEM TEKLİF ETME (actionProposal: null yap), durumu bildir ve ne yapacağını sor. ANCAK kullanıcı AÇIKÇA "randevu saatini 15:00 olarak güncelle", "saati değiştir" diyorsa, eski randevuyu bulup 'update_appointment' eylemi teklif et! Eğer AÇIKÇA "randevuyu iptal et", "tamamen sil" diyorsa 'delete_appointment' teklif et!
-2. ZORUNLU EYLEM TEKLİFİ: Eğer bir çakışma YOKSA ve kullanıcının cümlesinde bir niyet (randevu oluştur, müşteri ekle vb.) varsa, EKSİK BİLGİ OLSA DAHİ KESİNLİKLE bir 'actionProposal' (veya multi_step_plan) DÖNDÜRMEK ZORUNDASIN. Eksik bilgileri mantıklı varsayımlarla doldur. Asla işlem yapmadan sadece soru sorma!
-3. ÇOKLU GÖREV PLANI (MULTI-STEP PLAN): Kullanıcının istediği isim veritabanında (bağlamda) yoksa VE randevu talep ediyorsa, HEM müşteri ekleme HEM DE randevu oluşturma içeren 'multi_step_plan' teklif et. "online", "meet" varsa 'createMeet': true yap.
-4. SÖZEL ONAY DURUMU: Bekleyen bir aksiyon varken kullanıcı "evet", "ekle", "onaylıyorum" derse, DOĞRUDAN o eylemi 'isApproved': true yaparak dön!
-5. REVİZYON DURUMU: Kullanıcı bekleyen eylemi değiştirmek istiyorsa 'actionProposal' payload'ını güncelleyip dön (isApproved: false).
-6. BAĞLAM VE BİLGİ: Kullanıcı sadece soru soruyorsa (işlem/eylem yoksa), yerel bağlamdan cevap ver.
+KURALLAR:
+1. Kullanıcı yeni bir randevu, görev, müşteri eklemek veya güncellemek istiyorsa sana sağlanan DİNAMİK ARAÇLARDAN (Tools) en uygun olanını KESİNLİKLE çağır. Doğrudan cevap verme, aracı kullan.
+2. Saat hesaplamalarını yerel zamana göre yap (sonuna Z ekleme).
+3. Çakışma kontrolünü mevcut bağlamdan yap. Eğer kullanıcının sorduğu bir bilgi (örn: "ahmetin numarası neydi?") mevcut bağlamda yoksa, KESİNLİKLE 'recall_saule_memory' aracını (tool) çağırarak geçmiş hafızaları ara.
+4. Kullanıcı bekleyen bir işlemi açıkça onaylıyorsa (örn: 'tamam', 'onaylıyorum'), sadece işlemi yapacağını söyle.
+5. NEDENSELLİK VE PROAKTİF BAĞLAM: Sadece iptal veya silme değil; kullanıcı mevcut bir veride değişiklik (güncelleme, silme, iptal vb.) yapmak istediğinde, işlemin ARKASINDAKİ NEDENİ sana sağlanan mevcut bağlamdan (Saule hafızasından) analiz et. Bağlamda herhangi bir mantıksal neden (örn: hastalık, fiyat, zaman uyuşmazlığı, öncelik değişimi vb.) bulursan, eylem teklifinde bunu zekice dahil et ("X nedeniyle işlemi gerçekleştirip, bu nedeni de tarihe/notlara ekleyeyim mi?"). Eğer bağlamda hiçbir ipucu bulamazsan, işlemi yapmayı teklif ederken aynı zamanda "Bunun nedenine dair sisteme bir not bırakmamı ister misin?" diye sor.`
+    });
 
-AKSİYON TEKLİFİ FORMATLARI (Eğer bir eylem teklif edeceksen veya güncelleyeceksen doldur, yoksa null bırak):
-Müşteri Ekleme: { "type": "create_customer", "payload": { "name": "Müşteri Adı" }, "buttonText": "Müşteriyi Oluştur", "isApproved": false }
-Çoklu Görev Planı (Randevu+Müşteri): 
-{ 
-  "type": "multi_step_plan", 
-  "steps": [
-    { "title": "Müşteri Kaydı", "description": "Müşteri Adı isimli kişi eklenecek." },
-    { "title": "Randevu Oluşturma", "description": "Tarih saatinde randevu atanacak." }
-  ],
-  "payload": { "customer": "Ad Soyad", "title": "Konu", "start": "2026-07-20T14:00:00", "createMeet": false }, 
-  "buttonText": "Planı Onayla ve Uygula", 
-  "isApproved": false 
-}
-Randevu Güncelleme:
-{
-  "type": "update_appointment",
-  "payload": { "customer": "Ad Soyad", "title": "Konu", "oldStart": "2026-07-15T07:00:00", "start": "2026-07-15T15:00:00", "createMeet": false },
-  "buttonText": "Randevuyu Güncelle",
-  "isApproved": false
-}
-Randevu Silme:
-{
-  "type": "delete_appointment",
-  "payload": { "customer": "Ad Soyad", "title": "Konu", "oldStart": "2026-07-15T07:00:00" },
-  "buttonText": "Randevuyu İptal Et",
-  "isApproved": false
-}
+    const chat = model.startChat();
+    let result = await chat.sendMessage(query);
+    let response = result.response;
 
-NETLEŞTİRME SORULARI (Clarification Questions):
-- ASLA KULLANMA. Bu alanı her zaman [] (boş dizi) olarak dön. Tüm iletişimi 'answer' alanı üzerinden akıcı bir konuşma (chat) olarak yap.
+    let finalAnswer = response.text();
+    let actionProposal = null;
+    let keepRunning = true;
+    let maxLoops = 3; // Prevent infinite loops
 
-BAĞLAM SENTEZİ: 
-Kullanıcının aynı aramayı kaç kez yaptığını tespit et ve yerel bağlamda elle tutulur bilgiler varsa kısa bir özet çıkar. Eğer anlamlı bir bilgi yoksa boş bırak ("").
+    while (keepRunning && maxLoops > 0) {
+      maxLoops--;
+      keepRunning = false;
+      const functionCalls = response.functionCalls();
+      
+      if (functionCalls && functionCalls.length > 0) {
+        
+        // Handle Dynamic Action Tools from Registry
+        const actionCall = functionCalls.find(c => CLARITY_ACTIONS[c.name]);
+        if (actionCall) {
+          const actionDef = CLARITY_ACTIONS[actionCall.name];
+          actionProposal = {
+            type: actionCall.name,
+            payload: actionCall.args,
+            buttonText: actionDef.buttonText,
+            isApproved: false
+          };
+          if (!finalAnswer) {
+             finalAnswer = "Sizin için aşağıdaki işlemi hazırladım. Lütfen detayları kontrol edip onaylayın.";
+          }
+          break; // Stop loop, we proposed an action
+        }
 
-YENİ GÖREV - NETLİK SKORU (Clarity Score):
-- Soru veya eylem çok netse (Örn: "Hava nasıl?", "Bu müşteriyi ekle", "Randevu oluştur"): Yüksek skor ver (80-100).
-- Asistanın işlem yapmak için daha fazla detaya ihtiyacı varsa: Düşük/Orta skor ver (30-70).
-
-DİKKAT: Yanıtını SADECE aşağıdaki formatta geçerli bir JSON olarak dön. Başka hiçbir metin veya markdown satırı (Örn: \`\`\`json) ekleme:
-{
-  "answer": "Buraya doğal, insansı net cevabını yaz...",
-  "actionProposal": null,
-  "synthesizedContext": "Buraya doğal bağlam sentezini yaz (veya boş bırak)",
-  "clarificationQuestions": ["Soru 1"],
-  "clarityScore": 85,
-  "topic": "randevu"
-}`;
-
-    const result = await model.generateContent(prompt);
-    let responseText = result.response.text();
-    
-    // Clean up potential markdown formatting or conversational text from Gemini response
-    let jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      responseText = jsonMatch[0];
+        // Handle recall_saule_memory
+        const recallCall = functionCalls.find(c => c.name === 'recall_saule_memory');
+        if (recallCall && userId) {
+          console.log(`[Agent] Calling recallContext for: ${recallCall.args.searchQuery}`);
+          try {
+            const spaceId = activeWorkspace?.id || userId;
+            const composition = await recallContext(recallCall.args.searchQuery, spaceId, 'workspace');
+            
+            // Format memory results to send back to model
+            let memoryString = "Sonuç bulunamadı.";
+            if (composition && composition.nodes && composition.nodes.length > 0) {
+              memoryString = composition.nodes.map((n: any) => n.content).join('\\n');
+            }
+            
+            // Send the function response back to Gemini to continue
+            result = await chat.sendMessage([{
+              functionResponse: {
+                name: 'recall_saule_memory',
+                response: { result: memoryString }
+              }
+            }]);
+            response = result.response;
+            finalAnswer = response.text();
+            keepRunning = true; // Continue the loop
+          } catch (e) {
+            console.error("Failed to recall memory", e);
+            result = await chat.sendMessage([{
+              functionResponse: {
+                name: 'recall_saule_memory',
+                response: { error: 'Hafıza çekilirken bir hata oluştu.' }
+              }
+            }]);
+            response = result.response;
+            finalAnswer = response.text();
+            keepRunning = true;
+          }
+        } else if (recallCall && !userId) {
+          // If no user ID is available, return error to model
+          result = await chat.sendMessage([{
+            functionResponse: {
+              name: 'recall_saule_memory',
+              response: { error: 'Kullanıcı oturumu bulunamadı.' }
+            }
+          }]);
+          response = result.response;
+          finalAnswer = response.text();
+          keepRunning = true;
+        }
+      }
     }
     
-    const data = JSON.parse(responseText);
-
     return NextResponse.json({ 
-      answer: data.answer,
-      actionProposal: data.actionProposal || null,
-      clarificationQuestions: data.clarificationQuestions || [],
-      synthesizedContext: data.synthesizedContext || "",
-      clarityScore: data.clarityScore || 30,
-      topic: data.topic || "genel"
+      answer: finalAnswer,
+      actionProposal: actionProposal,
+      clarificationQuestions: [],
+      synthesizedContext: "SML bağlamı kullanıldı.",
+      clarityScore: actionProposal ? 90 : 60,
+      topic: actionProposal ? "action" : "chat"
     });
   } catch (error: any) {
     console.error('Gemini API Error:', error);

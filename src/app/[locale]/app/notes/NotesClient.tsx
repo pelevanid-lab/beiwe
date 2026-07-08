@@ -128,6 +128,10 @@ export default function NotesClient({ dict }: { dict: any }) {
     return doc.body.textContent || "";
   };
 
+  const contentHasTags = (content: string) => {
+    return content.includes('[ORIGINAL_QUERY]') || content.includes('[SYNTHESIS]') || content.includes('[ACTION_RESULT');
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-paper)] p-8 overflow-y-auto w-full relative">
       <div className="max-w-5xl mx-auto w-full space-y-8">
@@ -167,44 +171,96 @@ export default function NotesClient({ dict }: { dict: any }) {
           />
         </div>
 
-        {/* Notes Grid */}
+        {/* Conversation History View */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1,2,3,4,5,6].map(i => (
-              <div key={i} className="h-48 rounded-2xl bg-[var(--color-ink)]/5 animate-pulse" />
+          <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
+            {[1,2,3,4].map(i => (
+              <div key={i} className="flex flex-col gap-4 w-full">
+                <div className="h-16 w-3/4 self-end rounded-2xl bg-[var(--color-ink)]/5 animate-pulse" />
+                <div className="h-24 w-3/4 self-start rounded-2xl bg-[var(--color-ink)]/5 animate-pulse" />
+              </div>
             ))}
           </div>
         ) : filteredNotes.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-[var(--color-ink-light)] bg-white/50 rounded-3xl border-2 border-dashed border-[var(--color-ink)]/10">
             <Bookmark size={48} className="mb-4 opacity-50" />
-            <h3 className="text-xl font-medium text-[var(--color-ink)]">{dict?.no_notes_found || "Henüz bir not bulunamadı"}</h3>
-            <p className="mt-2 text-center max-w-md" dangerouslySetInnerHTML={{ __html: dict?.no_notes_desc || "Sağ üstteki \"Yeni Not\" butonunu kullanarak veya arama çubuğuna <strong>/note</strong> yazarak yeni bir not ekleyebilirsiniz." }} />
+            <h3 className="text-xl font-medium text-[var(--color-ink)]">{dict?.no_notes_found || "Henüz bir işlem veya not bulunamadı"}</h3>
+            <p className="mt-2 text-center max-w-md" dangerouslySetInnerHTML={{ __html: dict?.no_notes_desc || "Burada Clarity Engine ile yaptığınız konuşmalar ve işlemler listelenir." }} />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="flex flex-col gap-8 max-w-4xl mx-auto w-full pb-20">
             {filteredNotes.map(note => {
-              const cleanedContent = formatContent(note.content);
+              const originalQuery = extractOriginalQuery(note.content);
+              const synthesis = extractSynthesis(note.content);
               const actionResult = extractActionResult(note.content);
               
+              const isAgentInteraction = contentHasTags(note.content);
+              const timeString = new Date(note.createdAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+
               return (
-                <div 
-                  key={note.id} 
-                  onClick={() => router.push(`/tr/app?query=${encodeURIComponent(extractOriginalQuery(note.content))}`)}
-                  className="bg-white p-6 rounded-2xl shadow-sm border border-[var(--color-ink)]/5 hover:shadow-md hover:border-[var(--color-burnt-orange)]/30 transition-all group flex flex-col cursor-pointer h-[240px]"
-                >
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs font-bold text-[var(--color-ink-light)]">
-                      {new Date(note.createdAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })}
+                <div key={note.id} className="flex flex-col gap-4 w-full group">
+                  
+                  {/* User Bubble (The Query or Manual Note) */}
+                  <div className="flex flex-col items-end w-full">
+                    <div className="bg-[var(--color-burnt-orange)] text-white px-6 py-4 rounded-3xl rounded-tr-sm max-w-[85%] sm:max-w-[75%] shadow-sm">
+                      <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{originalQuery}</p>
+                    </div>
+                    <span className="text-[11px] text-[var(--color-ink-light)] mt-1.5 font-medium px-1">
+                      Siz • {timeString}
                     </span>
-                    {actionResult && (
-                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-md text-[10px] font-bold overflow-hidden text-ellipsis whitespace-nowrap max-w-[200px]">
-                        {actionResult}
+                  </div>
+
+                  {/* Agent Bubble (Synthesis & Action Result) */}
+                  {(synthesis || actionResult || !isAgentInteraction) && (
+                    <div className="flex flex-col items-start w-full mt-1">
+                      <div className="bg-white border border-[var(--color-ink)]/10 px-6 py-4 rounded-3xl rounded-tl-sm max-w-[85%] sm:max-w-[75%] shadow-sm">
+                        
+                        {synthesis && (
+                          <div className="text-[15px] text-[var(--color-ink)] leading-relaxed whitespace-pre-wrap mb-3">
+                            {synthesis}
+                          </div>
+                        )}
+                        
+                        {actionResult && (
+                          <div className="inline-flex items-center gap-2 bg-green-50 border border-green-100 text-green-700 px-3 py-2 rounded-xl text-xs font-bold mt-1">
+                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                            {actionResult}
+                          </div>
+                        )}
+
+                        {!isAgentInteraction && !synthesis && !actionResult && (
+                          <div className="text-[15px] text-[var(--color-ink)] italic">
+                            (Sisteme manuel not olarak eklendi)
+                          </div>
+                        )}
+
+                      </div>
+                      <span className="text-[11px] text-[var(--color-ink-light)] mt-1.5 font-medium px-1">
+                        Clarity Engine • {timeString}
                       </span>
-                    )}
+                    </div>
+                  )}
+
+                  {/* Actions Row */}
+                  <div className="flex items-center justify-center mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => {
+                        localStorage.setItem('clarity_restore_note', JSON.stringify({
+                          originalQuery,
+                          synthesis,
+                          actionResult
+                        }));
+                        router.push('/tr/app?restore=true');
+                      }}
+                      className="flex items-center gap-2 bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink-light)] hover:text-[var(--color-burnt-orange)] hover:border-[var(--color-burnt-orange)]/30 px-4 py-2 rounded-full text-xs font-semibold shadow-sm transition-all hover:shadow-md"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                      </svg>
+                      Konuşmaya Devam Et
+                    </button>
                   </div>
-                  <div className="prose prose-sm prose-orange max-w-none text-[var(--color-ink)] line-clamp-6">
-                    <div dangerouslySetInnerHTML={{ __html: cleanedContent }} />
-                  </div>
+
                 </div>
               );
             })}
