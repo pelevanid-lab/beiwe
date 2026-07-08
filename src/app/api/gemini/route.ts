@@ -99,10 +99,11 @@ KURALLAR:
         // Handle recall_saule_memory
         const recallCall = functionCalls.find(c => c.name === 'recall_saule_memory');
         if (recallCall && userId) {
-          console.log(`[Agent] Calling recallContext for: ${recallCall.args.searchQuery}`);
+          const searchQuery = (recallCall.args as { searchQuery: string }).searchQuery;
+          console.log(`[Agent] Calling recallContext for: ${searchQuery}`);
           try {
             const spaceId = activeWorkspace?.id || userId;
-            const composition = await recallContext(recallCall.args.searchQuery, spaceId, 'workspace');
+            const composition = await recallContext(searchQuery, spaceId, 'workspace');
             
             // Format memory results to send back to model
             let memoryString = "Sonuç bulunamadı.";
