@@ -94,11 +94,13 @@ export default function InboxClient({ dict }: { dict: any }) {
         if (!groups.has(groupKey)) {
           // Store the normalized sender (email) so the chat header looks consistent
           // Set id to groupKey so selectedMessageId persists across snapshots
-          groups.set(groupKey, { ...msg, id: groupKey, sender: rawSender, threadId: msg.threadId || msg.id });
+          groups.set(groupKey, { ...msg, id: groupKey, docIds: [doc.id], sender: rawSender, threadId: msg.threadId || msg.id });
         } else {
           const existing = groups.get(groupKey)!;
           // Prepend older history to the newest message's history
           existing.history = [...msg.history, ...existing.history];
+          existing.docIds = existing.docIds || [];
+          existing.docIds.push(doc.id);
         }
       });
       
@@ -410,9 +412,11 @@ export default function InboxClient({ dict }: { dict: any }) {
 
       // 2. Update Firestore message folder to archive
       // Update ALL messages from this contact (grouped conversation)
-      // The message.id is the groupKey (contact email), real Firestore docs need filtering
+      // The message.docIds contains real Firestore doc IDs
       try {
-        await updateDoc(doc(db, 'inbox_messages', message.id), { folder: 'archive' });
+        const docIds: string[] = (message as any).docIds || [message.id];
+        const promises = docIds.map(docId => updateDoc(doc(db, 'inbox_messages', docId), { folder: 'archive' }));
+        await Promise.all(promises);
       } catch(e) {}
 
       setArchiveModal(prev => ({ ...prev, isSaving: false, step: 'done' }));
