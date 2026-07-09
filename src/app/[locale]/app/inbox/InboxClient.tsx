@@ -56,17 +56,29 @@ export default function InboxClient({ dict }: { dict: any }) {
       snapshot.forEach((doc) => {
         const msg = { id: doc.id, ...doc.data() } as InboxMessage;
         
-        // Group by threadId if available, fallback to sender
-        const groupKey = msg.threadId || msg.sender;
+        // Group strictly by sender to create a "Chat" feel per contact
+        // We can extract the email from "Name <email>" for better grouping
+        const extractEmail = (str: string) => {
+          const match = str.match(/<(.+)>/);
+          return match ? match[1] : str;
+        };
+        
+        let rawSender = msg.sender;
+        // If the message is in the 'sent' folder, the sender is actually 'me' 
+        // and the real conversation partner is the 'to' address.
+        if (msg.folder === 'sent' && msg.to) {
+           rawSender = msg.to;
+        }
+
+        const groupKey = extractEmail(rawSender);
         
         if (!groups.has(groupKey)) {
-          groups.set(groupKey, msg);
+          // Store the normalized sender (email) so the chat header looks consistent
+          groups.set(groupKey, { ...msg, sender: rawSender });
         } else {
           const existing = groups.get(groupKey)!;
           // Prepend older history to the newest message's history
           existing.history = [...msg.history, ...existing.history];
-          // If the older message was unread, we might want to keep the whole thread unread? 
-          // (Usually the newest message's unread status defines the thread's status, so we leave it)
         }
       });
       
