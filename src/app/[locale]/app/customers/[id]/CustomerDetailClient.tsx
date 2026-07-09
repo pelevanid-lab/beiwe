@@ -65,6 +65,12 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [editingOldNoteId, setEditingOldNoteId] = useState<string | null>(null);
 
+  // Interaction states
+  const [isAddingInteraction, setIsAddingInteraction] = useState(false);
+  const [interactionPlatform, setInteractionPlatform] = useState('Yüzyüze');
+  const [interactionNote, setInteractionNote] = useState('');
+  const [isSavingInteraction, setIsSavingInteraction] = useState(false);
+
   // Appointment states
   const [isAddingAppointment, setIsAddingAppointment] = useState(false);
   const [appointmentTitle, setAppointmentTitle] = useState('');
@@ -356,11 +362,49 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
     }
   };
 
+  const handleAddInteraction = async () => {
+    if (!interactionNote.trim() || !user || !customer) return;
+    setIsSavingInteraction(true);
+    try {
+      const { ingestMemory } = await import('@/lib/saule-core-client');
+      const token = await user.getIdToken();
+      
+      const finalContent = `/note Müşteri: ${name} - Manuel Etkileşim Notu (${interactionPlatform}):\n\n[Ben] ${interactionNote.trim()}`;
+      
+      const res = await ingestMemory(
+        finalContent,
+        'knowledge',
+        { source: 'manual_interaction_note', author: user.uid, createdAt: Date.now(), platform: interactionPlatform },
+        'fact',
+        'personal',
+        user.uid,
+        token
+      );
+      
+      setAppointments((prev: any[]) => [
+        {
+          id: res.node?.id || Date.now().toString(),
+          content: finalContent,
+          createdAt: Date.now(),
+        },
+        ...prev
+      ].sort((a, b) => b.createdAt - a.createdAt));
+      
+      setInteractionNote('');
+      setIsAddingInteraction(false);
+    } catch (err) {
+      console.error("Failed to add interaction:", err);
+    } finally {
+      setIsSavingInteraction(false);
+    }
+  };
+
   const handleEditNoteClick = (noteText: string, noteId: string) => {
     setNewNote(noteText);
     setEditingOldNoteId(noteId);
     setIsAddingNote(true);
     setIsAddingAppointment(false);
+    setIsAddingInteraction(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -839,6 +883,7 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
                     onClick={() => { 
                       setIsAddingAppointment(!isAddingAppointment); 
                       setIsAddingNote(false); 
+                      setIsAddingInteraction(false);
                       if (isAddingAppointment) setEditingOldAppointment(null);
                     }}
                     className="text-sm font-medium text-[var(--color-burnt-orange)] hover:underline"
@@ -849,14 +894,56 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
                     onClick={() => { 
                       setIsAddingNote(!isAddingNote); 
                       setIsAddingAppointment(false); 
+                      setIsAddingInteraction(false);
                       if (isAddingNote) setEditingOldNoteId(null);
                     }}
                     className="text-sm font-medium text-[var(--color-burnt-orange)] hover:underline"
                   >
-                    {isAddingNote ? dict.customers.cancel : '+ Etkileşim Notu'}
+                    {isAddingNote ? dict.customers.cancel : dict.customers.add_note}
+                  </button>
+                  <button 
+                    onClick={() => { 
+                      setIsAddingInteraction(!isAddingInteraction); 
+                      setIsAddingNote(false); 
+                      setIsAddingAppointment(false);
+                    }}
+                    className="text-sm font-medium text-[var(--color-burnt-orange)] hover:underline"
+                  >
+                    {isAddingInteraction ? dict.customers.cancel : '+ Etkileşim Notu'}
                   </button>
                 </div>
               </div>
+
+              {isAddingInteraction && (
+                <div className="mb-8 bg-blue-50/50 p-4 rounded-2xl border border-blue-100 animate-in fade-in duration-200">
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {['Yüzyüze', 'Telefon', 'E-posta', 'WhatsApp', 'Instagram', 'Telegram', 'Web Chat'].map(platform => (
+                      <button
+                        key={platform}
+                        onClick={() => setInteractionPlatform(platform)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${interactionPlatform === platform ? 'bg-[var(--color-burnt-orange)] text-white' : 'bg-white text-[var(--color-ink-light)] border border-gray-200 hover:bg-gray-50'}`}
+                      >
+                        {platform}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea 
+                    value={interactionNote}
+                    onChange={e => setInteractionNote(e.target.value)}
+                    placeholder={`${interactionPlatform} görüşmesi hakkında notlar... (Örn: [Müşteri] Merhaba [Ben] Nasılsınız)`}
+                    className="w-full bg-white border border-blue-100 rounded-xl p-3 text-sm focus:outline-none focus:border-[var(--color-burnt-orange)] min-h-[100px] resize-none mb-3 text-[var(--color-ink)]"
+                  />
+                  <div className="flex justify-end">
+                    <button 
+                      onClick={handleAddInteraction}
+                      disabled={!interactionNote.trim() || isSavingInteraction}
+                      className="px-4 py-2 bg-[var(--color-burnt-orange)] text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center gap-2"
+                    >
+                      {isSavingInteraction ? dict.customers.saving || 'Kaydediliyor...' : <><Check size={16} /> {dict.customers.save}</>}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {isAddingNote && (
                 <div className="mb-8 bg-[var(--color-ink)]/5 p-4 rounded-2xl border border-[var(--color-ink)]/10 animate-in fade-in duration-200">
@@ -960,15 +1047,16 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
                             {(() => {
                               // If it looks like a chat archive (e.g. [Ben] or [Müşteri]), render it as bubbles
                               if (noteText.includes('[Ben]') || noteText.includes('[Müşteri]') || (noteText.includes('[') && noteText.includes(']'))) {
-                                const lines = noteText.split('\n').filter((l: string) => l.trim() !== '');
-                                const isChat = lines.some((l: string) => l.trim().startsWith('['));
+                                // Split by lookahead for [Sender] pattern to handle cases where newlines are stripped
+                                const parts = noteText.split(/(?=\[[^\]]+\] )/g).map((l: string) => l.trim()).filter(Boolean);
+                                const isChat = parts.some((l: string) => l.startsWith('['));
                                 
                                 if (isChat) {
                                   // extract header part vs chat part
                                   const headerLines: string[] = [];
                                   const chatLines: string[] = [];
                                   
-                                  lines.forEach((line: string) => {
+                                  parts.forEach((line: string) => {
                                     if (line.trim().startsWith('[')) chatLines.push(line);
                                     else headerLines.push(line);
                                   });

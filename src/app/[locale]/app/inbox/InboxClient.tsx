@@ -85,9 +85,9 @@ export default function InboxClient({ dict }: { dict: any }) {
         };
         
         let rawSender = msg.sender;
-        // If the message is in the 'sent' folder, the sender is actually 'me' 
+        // If the message is an outgoing message (has 'to' field), the sender is actually 'me' 
         // and the real conversation partner is the 'to' address.
-        if (msg.folder === 'sent' && msg.to) {
+        if (msg.to) {
            rawSender = msg.to;
         }
 
