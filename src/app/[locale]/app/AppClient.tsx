@@ -571,6 +571,12 @@ export default function AppClient({ dict }: { dict: any }) {
               openTab({ id: 'customers-module', title: 'Müşteriler', type: 'customers' });
             } else if (data.uiRoute === 'inbox') {
               openTab({ id: 'inbox-module', title: 'İletişim Merkezi', type: 'inbox' });
+            } else if (data.uiRoute === 'docs') {
+              openTab({ id: 'docs-module', title: 'Dokümanlar', type: 'docs' });
+            } else if (data.uiRoute === 'appointments') {
+              openTab({ id: 'appointments-module', title: 'Randevular', type: 'appointments' });
+            } else if (data.uiRoute === 'notes') {
+              openTab({ id: 'notes-module', title: 'Notlar', type: 'notes' });
             }
           }
 
