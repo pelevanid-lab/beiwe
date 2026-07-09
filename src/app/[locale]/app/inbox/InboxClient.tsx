@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, MessageCircle, Mail, Camera, Send, Filter, MoreVertical, Archive, Trash2, Reply, Send as SendIcon, Inbox, SendHorizontal, FileText, AlertCircle, Phone, Globe } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { Search, MessageCircle, Mail, Camera, Send, Filter, MoreVertical, Archive, Trash2, Reply, Send as SendIcon, Inbox, SendHorizontal, FileText, AlertCircle, Phone, Globe, UserPlus, CheckCircle, X } from 'lucide-react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { useAuth } from '@/components/AuthProvider';
 
 type ChatMessage = { sender: 'me' | 'them'; text: string; time: string };
 
@@ -39,6 +40,8 @@ const FOLDERS = [
 
 export default function InboxClient({ dict }: { dict: any }) {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { user } = useAuth();
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -46,6 +49,15 @@ export default function InboxClient({ dict }: { dict: any }) {
 
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Archive modal state
+  const [archiveModal, setArchiveModal] = useState<{
+    open: boolean;
+    message: InboxMessage | null;
+    matchedCustomer: { id: string; name: string } | null;
+    isSaving: boolean;
+    step: 'confirm' | 'no_customer' | 'done';
+  }>({ open: false, message: null, matchedCustomer: null, isSaving: false, step: 'confirm' });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -276,6 +288,123 @@ export default function InboxClient({ dict }: { dict: any }) {
     }
   };
 
+  const handleArchive = async (msg: InboxMessage) => {
+    // Extract plain email from sender string like "Name <email>"
+    const extractEmailStr = (str: string) => {
+      const m = str.match(/<(.+)>/);
+      return m ? m[1].toLowerCase() : str.toLowerCase();
+    };
+    const contactEmail = extractEmailStr(msg.contact || msg.sender);
+    const contactName = msg.sender.replace(/<.*>/, '').trim() || contactEmail;
+
+    // Search for matching customer in Saule
+    let matchedCustomer: { id: string; name: string } | null = null;
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_SAULE_API_URL || 'https://us-central1-saule-core.cloudfunctions.net/api';
+      const res = await fetch(`${apiUrl}/api/smi/nodes?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const allNodes = data.nodes || [];
+        const match = allNodes.find((n: any) =>
+          n.spaceId === user?.uid &&
+          n.content &&
+          n.content.toLowerCase().includes(contactEmail)
+        );
+        if (match) {
+          const nameMatch = match.content.match(/\/customer\s+(.+)/);
+          matchedCustomer = { id: match.id, name: nameMatch ? nameMatch[1].trim() : contactName };
+        }
+      }
+    } catch (e) {
+      console.error('Customer search failed:', e);
+    }
+
+    setArchiveModal({
+      open: true,
+      message: msg,
+      matchedCustomer,
+      isSaving: false,
+      step: matchedCustomer ? 'confirm' : 'no_customer',
+    });
+  };
+
+  const doArchive = async () => {
+    const { message, matchedCustomer } = archiveModal;
+    if (!message || !user) return;
+    setArchiveModal(prev => ({ ...prev, isSaving: true }));
+
+    const extractEmailStr = (str: string) => {
+      const m = str.match(/<(.+)>/);
+      return m ? m[1].toLowerCase() : str.toLowerCase();
+    };
+    const contactEmail = extractEmailStr(message.contact || message.sender);
+    const contactName = message.sender.replace(/<.*>/, '').trim() || contactEmail;
+    const historyText = message.history.map(h => `[${h.sender === 'me' ? 'Ben' : contactName}] ${h.text}`).join('\n');
+
+    try {
+      const { ingestMemory } = await import('@/lib/saule-core-client');
+
+      // Save conversation as memory in Saule
+      const noteContent = matchedCustomer
+        ? `/note Müşteri: ${matchedCustomer.name} - İletişim Merkezi konuşması arşivlendi (${message.platform}, ${contactEmail}):\n\n${historyText}`
+        : `/note Müşteri: ${contactName} - İletişim Merkezi konuşması arşivlendi (${message.platform}, ${contactEmail}):\n\n${historyText}`;
+
+      await ingestMemory(
+        noteContent,
+        'action',
+        { source: 'inbox_archive', author: user.uid, contactEmail, platform: message.platform, createdAt: Date.now() },
+        'fact',
+        'personal',
+        user.uid
+      );
+
+      // Update message folder to 'archive' in Firestore
+      try {
+        await updateDoc(doc(db, 'inbox_messages', message.id === archiveModal.message?.id ? message.id : message.id), {
+          folder: 'archive'
+        });
+      } catch(e) {}
+
+      setArchiveModal(prev => ({ ...prev, isSaving: false, step: 'done' }));
+      setSelectedMessageId(null);
+      setTimeout(() => setArchiveModal({ open: false, message: null, matchedCustomer: null, isSaving: false, step: 'confirm' }), 1500);
+    } catch(e) {
+      console.error('Archive failed:', e);
+      setArchiveModal(prev => ({ ...prev, isSaving: false }));
+    }
+  };
+
+  const doSaveCustomerAndArchive = async () => {
+    const { message } = archiveModal;
+    if (!message || !user) return;
+    setArchiveModal(prev => ({ ...prev, isSaving: true }));
+
+    const extractEmailStr = (str: string) => {
+      const m = str.match(/<(.+)>/);
+      return m ? m[1].toLowerCase() : str.toLowerCase();
+    };
+    const contactEmail = extractEmailStr(message.contact || message.sender);
+    const contactName = message.sender.replace(/<.*>/, '').trim() || contactEmail;
+
+    try {
+      const { ingestMemory } = await import('@/lib/saule-core-client');
+      // Save as new customer
+      await ingestMemory(
+        `/customer ${contactName} - E-posta: ${contactEmail}`,
+        'action',
+        { source: 'inbox_archive', author: user.uid, createdAt: Date.now() },
+        'fact',
+        'personal',
+        user.uid
+      );
+      // Now archive
+      await doArchive();
+    } catch(e) {
+      console.error('Save customer failed:', e);
+      setArchiveModal(prev => ({ ...prev, isSaving: false }));
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-paper)] overflow-hidden w-full relative">
       
@@ -409,7 +538,13 @@ export default function InboxClient({ dict }: { dict: any }) {
               </div>
               <div className="flex gap-2">
                 <button className="p-2 text-[var(--color-ink-light)] hover:bg-[var(--color-ink)]/5 rounded-lg transition-colors" title="Yanıtla"><Reply size={18}/></button>
-                <button className="p-2 text-[var(--color-ink-light)] hover:bg-[var(--color-ink)]/5 rounded-lg transition-colors" title="Arşivle"><Archive size={18}/></button>
+                <button
+                  onClick={() => handleArchive(selectedMessage)}
+                  className="p-2 text-[var(--color-ink-light)] hover:bg-amber-50 hover:text-amber-600 rounded-lg transition-colors"
+                  title="Arşivle"
+                >
+                  <Archive size={18}/>
+                </button>
                 <button className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Sil"><Trash2 size={18}/></button>
                 <button className="p-2 text-[var(--color-ink-light)] hover:bg-[var(--color-ink)]/5 rounded-lg transition-colors"><MoreVertical size={18}/></button>
               </div>
@@ -489,6 +624,108 @@ export default function InboxClient({ dict }: { dict: any }) {
           </div>
         </div>
       </div>
+
+      {/* Archive Modal */}
+      {archiveModal.open && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 flex flex-col gap-6 relative">
+            <button
+              onClick={() => setArchiveModal(prev => ({ ...prev, open: false }))}
+              className="absolute top-4 right-4 p-2 rounded-xl hover:bg-gray-100 text-gray-400"
+            >
+              <X size={18}/>
+            </button>
+
+            {archiveModal.step === 'done' ? (
+              <div className="flex flex-col items-center gap-4 py-4">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle size={32} className="text-green-500" />
+                </div>
+                <p className="text-lg font-bold text-[var(--color-ink)]">Konuşma arşivlendi!</p>
+                <p className="text-sm text-[var(--color-ink-light)] text-center">Saule belleğine kaydedildi.</p>
+              </div>
+            ) : archiveModal.step === 'confirm' ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center">
+                    <Archive size={22} className="text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-[var(--color-ink)] text-lg">Konuşmayı Arşivle</h3>
+                    <p className="text-sm text-[var(--color-ink-light)]">Bu konuşma Saule'ye kaydedilecek</p>
+                  </div>
+                </div>
+
+                <div className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center gap-3">
+                  <CheckCircle size={18} className="text-green-500 shrink-0"/>
+                  <div>
+                    <p className="text-sm font-semibold text-green-800">Eşleşen Müşteri Bulundu</p>
+                    <p className="text-sm text-green-700">
+                      <span className="font-bold">{archiveModal.matchedCustomer?.name}</span> ile ilişkilendirilecek
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-2xl p-4 text-sm text-[var(--color-ink-light)] max-h-32 overflow-y-auto">
+                  <p className="font-medium text-[var(--color-ink)] mb-1">Konuşma özeti:</p>
+                  <p className="line-clamp-4">{archiveModal.message?.history.slice(-3).map(h => h.text).join(' ... ')}</p>
+                </div>
+
+                <button
+                  onClick={doArchive}
+                  disabled={archiveModal.isSaving}
+                  className="w-full py-3.5 bg-[var(--color-burnt-orange)] text-white rounded-2xl font-bold hover:bg-orange-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  <Archive size={18}/>
+                  {archiveModal.isSaving ? 'Kaydediliyor...' : 'Arşivle ve Kaydet'}
+                </button>
+              </>
+            ) : (
+              /* no_customer step */
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center">
+                    <Archive size={22} className="text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-[var(--color-ink)] text-lg">Konuşmayı Arşivle</h3>
+                    <p className="text-sm text-[var(--color-ink-light)]">Bu kişi kayıtlarda bulunamadı</p>
+                  </div>
+                </div>
+
+                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 flex items-center gap-3">
+                  <UserPlus size={18} className="text-orange-500 shrink-0"/>
+                  <div>
+                    <p className="text-sm font-semibold text-orange-800">Kayıtlı Müşteri Bulunamadı</p>
+                    <p className="text-sm text-orange-700">
+                      <span className="font-bold">{archiveModal.message?.sender.replace(/<.*>/, '').trim()}</span> henüz müşteri listesinde yok
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={doSaveCustomerAndArchive}
+                    disabled={archiveModal.isSaving}
+                    className="w-full py-3.5 bg-[var(--color-burnt-orange)] text-white rounded-2xl font-bold hover:bg-orange-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    <UserPlus size={18}/>
+                    {archiveModal.isSaving ? 'Kaydediliyor...' : 'Müşteri Olarak Kaydet ve Arşivle'}
+                  </button>
+                  <button
+                    onClick={doArchive}
+                    disabled={archiveModal.isSaving}
+                    className="w-full py-3 border border-[var(--color-ink)]/10 rounded-2xl font-semibold text-[var(--color-ink-light)] hover:bg-gray-50 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    <Archive size={16}/>
+                    Müşteri Kaydetmeden Yalnızca Arşivle
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );
