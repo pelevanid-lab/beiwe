@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { auth } from '@/lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { fetchWithGoogleAuth } from '@/lib/google-api';
 
 // Google OAuth scope definitions — each service has its own scope
 const GOOGLE_SERVICES = [
@@ -137,10 +138,9 @@ export default function IntegrationSetupClient({ dict, integrationId }: { dict: 
     
     setIsSaving(true);
     try {
-      const res = await fetch('/api/gmail/watch', {
+      const res = await fetchWithGoogleAuth('/api/gmail/watch', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
