@@ -223,7 +223,7 @@ export default function DocsClient({ dict }: { dict: any }) {
                   rel="noopener noreferrer" 
                   className="px-4 py-2 hover:bg-gray-100 rounded-xl text-gray-700 text-sm font-medium flex items-center gap-2 transition-colors"
                 >
-                  Tam Ekranda Aç <ArrowUpRight size={16} />
+                  Yeni Sekmede Aç <ArrowUpRight size={16} />
                 </a>
                 <button 
                   onClick={() => setPreviewDoc(null)} 
