@@ -104,6 +104,15 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error('Webhook Error:', error);
+    try {
+      const { getAdminDb } = await import('@/lib/firebase-admin');
+      const adminDb = getAdminDb();
+      await adminDb.collection('webhook_logs').add({ 
+        timestamp: new Date().toISOString(),
+        critical_error: error.message || 'Unknown error',
+        stack: error.stack
+      });
+    } catch (e) {}
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
