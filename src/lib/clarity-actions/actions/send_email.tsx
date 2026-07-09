@@ -1,6 +1,7 @@
 import { SchemaType } from '@google/generative-ai';
 import { ClarityAction, ActionExecutionContext } from '../types';
 import React from 'react';
+import { fetchWithGoogleAuth } from '@/lib/google-api';
 
 export const SendEmailAction: ClarityAction = {
   name: 'send_email',
@@ -32,16 +33,10 @@ export const SendEmailAction: ClarityAction = {
 
   execute: async (payload: any, context: ActionExecutionContext) => {
     try {
-      const googleToken = localStorage.getItem('google_access_token');
-      if (!googleToken) {
-        return { success: false, message: 'E-posta göndermek için Gmail entegrasyonu (Google girişi) gereklidir.' };
-      }
-
-      const res = await fetch('/api/gmail/send', {
+      const res = await fetchWithGoogleAuth('/api/gmail/send', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${googleToken}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           to: payload.to,
