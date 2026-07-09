@@ -72,7 +72,7 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const headers = msgData.payload.headers;
+      const headers = msgData.payload?.headers || [];
       const subject = headers.find((h: any) => h.name === 'Subject')?.value || 'Konusuz';
       const from = headers.find((h: any) => h.name === 'From')?.value || 'Bilinmeyen';
       const to = headers.find((h: any) => h.name === 'To')?.value || emailAddress;
@@ -88,8 +88,8 @@ export async function POST(request: Request) {
         preview: subject + ' - ' + textBody,
         timestamp: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
         createdAt: new Date().toISOString(),
-        unread: msgData.labelIds.includes('UNREAD'),
-        folder: msgData.labelIds.includes('SENT') ? 'sent' : 'inbox',
+        unread: msgData.labelIds?.includes('UNREAD') || false,
+        folder: msgData.labelIds?.includes('SENT') ? 'sent' : 'inbox',
         ownerEmail: emailAddress,
         history: [
           { sender: 'them', text: subject + '\n\n' + textBody, time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) }
