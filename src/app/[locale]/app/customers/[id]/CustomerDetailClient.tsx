@@ -943,7 +943,7 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
                     }
                     
                     if (isNote) {
-                      const noteMatch = app.content.match(/\/(?:note|not)\s+[^-]+-\s*(.*)/i);
+                      const noteMatch = app.content.match(/\/(?:note|not)\s+[^-]+-\s*([\s\S]*)/i);
                       const noteText = noteMatch ? noteMatch[1].trim() : app.content;
                       const noteDate = formatLocalizedDate(app.createdAt);
                       const noteTime = new Date(app.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });

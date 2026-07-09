@@ -22,6 +22,7 @@ type InboxMessage = {
   threadId?: string;
   to?: string;
   docIds?: string[];
+  docFolders?: string[];
 };
 
 const INTEGRATIONS = [
@@ -95,15 +96,26 @@ export default function InboxClient({ dict }: { dict: any }) {
         if (!groups.has(groupKey)) {
           // Store the normalized sender (email) so the chat header looks consistent
           // Set id to groupKey so selectedMessageId persists across snapshots
-          groups.set(groupKey, { ...msg, id: groupKey, docIds: [doc.id], sender: rawSender, threadId: msg.threadId || msg.id });
+          groups.set(groupKey, { ...msg, id: groupKey, docIds: [doc.id], docFolders: [msg.folder], sender: rawSender, threadId: msg.threadId || msg.id });
         } else {
           const existing = groups.get(groupKey)!;
           // Prepend older history to the newest message's history
           existing.history = [...msg.history, ...existing.history];
           existing.docIds = existing.docIds || [];
           existing.docIds.push(doc.id);
+          existing.docFolders = existing.docFolders || [];
+          existing.docFolders.push(msg.folder);
         }
       });
+
+      // Re-compute effective folder for each group:
+      // If ALL docs of a group are in 'archive' → show as archive
+      // Otherwise, show as the first (newest) doc's folder (inbox / sent / drafts / spam)
+      for (const [, group] of groups) {
+        const allFolders = group.docFolders || [group.folder];
+        const allArchived = allFolders.length > 0 && allFolders.every(f => f === 'archive');
+        group.folder = allArchived ? 'archive' : (allFolders.find(f => f !== 'archive') as any) || group.folder;
+      }
       
       const fetchedMessages = Array.from(groups.values());
       
