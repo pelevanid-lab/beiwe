@@ -960,15 +960,15 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
                             {(() => {
                               // If it looks like a chat archive (e.g. [Ben] or [Müşteri]), render it as bubbles
                               if (noteText.includes('[Ben]') || noteText.includes('[Müşteri]') || (noteText.includes('[') && noteText.includes(']'))) {
-                                const lines = noteText.split('\n').filter(l => l.trim() !== '');
-                                const isChat = lines.some(l => l.trim().startsWith('['));
+                                const lines = noteText.split('\n').filter((l: string) => l.trim() !== '');
+                                const isChat = lines.some((l: string) => l.trim().startsWith('['));
                                 
                                 if (isChat) {
                                   // extract header part vs chat part
-                                  const headerLines = [];
-                                  const chatLines = [];
+                                  const headerLines: string[] = [];
+                                  const chatLines: string[] = [];
                                   
-                                  lines.forEach(line => {
+                                  lines.forEach((line: string) => {
                                     if (line.trim().startsWith('[')) chatLines.push(line);
                                     else headerLines.push(line);
                                   });
@@ -979,7 +979,7 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
                                         <p className="text-sm font-semibold text-[var(--color-ink)] opacity-80 mb-2 whitespace-pre-wrap">{headerLines.join('\n')}</p>
                                       )}
                                       <div className="flex flex-col gap-2">
-                                        {chatLines.map((line, i) => {
+                                        {chatLines.map((line: string, i: number) => {
                                           const match = line.match(/^\[(.*?)\]\s*(.*)$/);
                                           if (match) {
                                             const isMe = match[1].toLowerCase() === 'ben' || match[1].toLowerCase() === 'me';
