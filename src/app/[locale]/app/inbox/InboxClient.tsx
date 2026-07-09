@@ -85,9 +85,10 @@ export default function InboxClient({ dict }: { dict: any }) {
         };
         
         let rawSender = msg.sender;
-        // If the message is an outgoing message (has 'to' field), the sender is actually 'me' 
-        // and the real conversation partner is the 'to' address.
-        if (msg.to) {
+        // Check if the message is an outgoing message by looking at its first history item.
+        // If the sender was 'me', we sent this message, so the real conversation partner is the 'to' address.
+        const isOutgoing = msg.history && msg.history.length > 0 && msg.history[0].sender === 'me';
+        if (isOutgoing && msg.to) {
            rawSender = msg.to;
         }
 
