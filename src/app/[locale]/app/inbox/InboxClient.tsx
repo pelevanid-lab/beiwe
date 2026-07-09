@@ -164,7 +164,7 @@ export default function InboxClient({ dict }: { dict: any }) {
       // Extract custom subject if exists, e.g. "<Test Konu> Merhaba"
       let customSubject = null;
       let finalReplyText = replyText;
-      const subjectMatch = replyText.match(/^<([^>]+)>(.*)$/s);
+      const subjectMatch = replyText.match(/^<([^>]+)>([\s\S]*)$/);
       if (subjectMatch) {
         customSubject = subjectMatch[1].trim();
         finalReplyText = subjectMatch[2].trim();
