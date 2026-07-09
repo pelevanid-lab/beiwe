@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, Plus, MoreVertical, LayoutGrid, List as ListIcon, Loader2, ArrowUpRight } from 'lucide-react';
+import { Search, FileText, Plus, MoreVertical, LayoutGrid, List as ListIcon, Loader2, ArrowUpRight, X } from 'lucide-react';
 import { fetchWithGoogleAuth } from '@/lib/google-api';
 
 interface GoogleDoc {
@@ -52,6 +52,7 @@ export default function DocsClient({ dict }: { dict: any }) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [docs, setDocs] = useState<GoogleDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [previewDoc, setPreviewDoc] = useState<GoogleDoc | null>(null);
 
   // Simulate API fetch from our real Google Sync endpoint
   useEffect(() => {
@@ -147,7 +148,7 @@ export default function DocsClient({ dict }: { dict: any }) {
             {docs.map(doc => (
               viewMode === 'grid' ? (
                 // Grid Item
-                <a key={doc.id} href={doc.webViewLink} target="_blank" rel="noopener noreferrer" className="group bg-white border border-[var(--color-ink)]/10 rounded-2xl overflow-hidden hover:shadow-xl transition-all hover:border-blue-500/30 flex flex-col cursor-pointer">
+                <div key={doc.id} onClick={() => setPreviewDoc(doc)} className="group bg-white border border-[var(--color-ink)]/10 rounded-2xl overflow-hidden hover:shadow-xl transition-all hover:border-blue-500/30 flex flex-col cursor-pointer">
                   <div className="h-32 bg-gray-50 border-b border-[var(--color-ink)]/5 flex items-center justify-center p-4 relative group-hover:bg-blue-50/50 transition-colors">
                     <FileText size={48} className="text-gray-300 group-hover:text-blue-200 transition-colors" />
                     <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -165,15 +166,15 @@ export default function DocsClient({ dict }: { dict: any }) {
                     </div>
                     <div className="mt-auto flex items-center justify-between text-xs text-[var(--color-ink-light)]">
                       <span>{doc.modifiedTime}</span>
-                      <button className="p-1 hover:bg-[var(--color-ink)]/5 rounded-md transition-colors">
+                      <button className="p-1 hover:bg-[var(--color-ink)]/5 rounded-md transition-colors" onClick={(e) => e.stopPropagation()}>
                         <MoreVertical size={14} />
                       </button>
                     </div>
                   </div>
-                </a>
+                </div>
               ) : (
                 // List Item
-                <a key={doc.id} href={doc.webViewLink} target="_blank" rel="noopener noreferrer" className="group bg-white border border-[var(--color-ink)]/10 rounded-xl p-3 flex items-center gap-4 hover:shadow-md transition-all hover:border-blue-500/30 cursor-pointer">
+                <div key={doc.id} onClick={() => setPreviewDoc(doc)} className="group bg-white border border-[var(--color-ink)]/10 rounded-xl p-3 flex items-center gap-4 hover:shadow-md transition-all hover:border-blue-500/30 cursor-pointer">
                   <img src={doc.iconLink} alt="Docs" className="w-6 h-6 shrink-0 ml-2" />
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-[var(--color-ink)] text-sm truncate group-hover:text-blue-600 transition-colors">
@@ -186,10 +187,10 @@ export default function DocsClient({ dict }: { dict: any }) {
                   <div className="w-32 text-xs text-[var(--color-ink-light)] text-right">
                     {doc.modifiedTime}
                   </div>
-                  <button className="p-2 text-[var(--color-ink-light)] hover:bg-[var(--color-ink)]/5 rounded-lg transition-colors">
+                  <button className="p-2 text-[var(--color-ink-light)] hover:bg-[var(--color-ink)]/5 rounded-lg transition-colors" onClick={(e) => e.stopPropagation()}>
                     <MoreVertical size={16} />
                   </button>
-                </a>
+                </div>
               )
             ))}
             
@@ -204,6 +205,46 @@ export default function DocsClient({ dict }: { dict: any }) {
         )}
 
       </div>
+
+      {/* Fullscreen Document Preview Modal */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex flex-col pt-4 px-4 pb-0 md:p-8">
+          <div className="flex-1 bg-white rounded-t-2xl md:rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+            {/* Header */}
+            <div className="h-16 border-b flex items-center justify-between px-6 shrink-0 bg-white">
+              <div className="flex items-center gap-3 min-w-0">
+                <img src={previewDoc.iconLink} alt="icon" className="w-6 h-6 shrink-0" />
+                <h3 className="font-semibold text-[var(--color-ink)] text-base truncate">{previewDoc.name}</h3>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-4">
+                <a 
+                  href={previewDoc.webViewLink} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="px-4 py-2 hover:bg-gray-100 rounded-xl text-gray-700 text-sm font-medium flex items-center gap-2 transition-colors"
+                >
+                  Tam Ekranda Aç <ArrowUpRight size={16} />
+                </a>
+                <button 
+                  onClick={() => setPreviewDoc(null)} 
+                  className="p-2 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors ml-2 text-gray-400"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+            {/* Iframe Body */}
+            <div className="flex-1 bg-gray-50 relative">
+              <iframe 
+                 src={previewDoc.webViewLink.replace('/edit', '/preview')} 
+                 className="absolute inset-0 w-full h-full border-none"
+                 sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                 title={previewDoc.name}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
