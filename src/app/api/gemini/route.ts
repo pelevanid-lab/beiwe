@@ -158,9 +158,10 @@ KURALLAR:
 1. İşlem yapmadan önce KESİNLİKLE önce 'read_beiwe_data' ile kaydın var olduğunu doğrula. Yoksa işlemi KESİNLİKLE yapma.
 2. "Bunu", "onu", "şunu" gibi zamirlerde KULLANICININ ŞU AN BAKTIĞI EKRAN bağlamını kullan.
 3. Çakışma, eksik bilgi veya belirsizlik varsa kullanıcıya sor, tahmin etme.
-4. Saat hesaplamalarını yerel zamana göre yap (sonuna Z ekleme).
-5. UI yönlendirmesi isteklerinde [UI_ROUTE: moduleName] etiketi kullanmak yerine 'route_ui' aracını çağır.
-6. Cevaplarını Türkçe ver. Kısa ve öz ol.`;
+4. Eğer kullanıcının bahsettiği bir müşterinin veya kaydın ID'sini biliyorsan (örn: Context'ten veya read_beiwe_data'dan), yanıtının sonuna KESİNLİKLE [UI_ROUTE: customer-ID] (veya ilgili modül/ID) etiketini ekle. Bu sayede arayüz otomatik olarak o sayfaya yönlenecektir.
+5. Saat hesaplamalarını yerel zamana göre yap (sonuna Z ekleme).
+6. UI yönlendirmesi isteklerinde [UI_ROUTE: moduleName] etiketi kullanmak yerine 'route_ui' aracını çağır.
+7. Cevaplarını Türkçe ver. Kısa ve öz ol.`;
 
     // ─── Convert chatHistory to Gemini Content format ────────────────────────
     const geminiHistory: Content[] = [];
@@ -390,8 +391,9 @@ KURALLAR:
     if (uiRoute) {
       parsedTopic = uiRoute;
     } else {
-      const routeMatch = finalAnswer?.match(/\[UI_ROUTE:\s*([a-zA-Z]+)\]/);
+      const routeMatch = finalAnswer?.match(/\[UI_ROUTE:\s*([a-zA-Z0-9_-]+)\]/);
       if (routeMatch) {
+        uiRoute = routeMatch[1];
         parsedTopic = routeMatch[1].toLowerCase();
         finalAnswer = finalAnswer.replace(routeMatch[0], '').trim();
       }
