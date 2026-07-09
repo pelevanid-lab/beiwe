@@ -558,6 +558,22 @@ export default function AppClient({ dict }: { dict: any }) {
              setResults(prev => prev ? { ...prev, actionProposal: data.actionProposal } : prev);
           }
 
+          if (data.uiRoute) {
+            const customerMatch = data.uiRoute.match(/customer-(.+)/);
+            if (customerMatch) {
+              const targetNode = combinedNodes.find((n: any) => n.id === customerMatch[1]);
+              if (targetNode) {
+                const match = targetNode.content.match(/\/(?:customer|müşteri)\s+([^-]+)/i);
+                const customerName = match ? match[1].trim() : 'Müşteri';
+                openTab({ id: `customer-${targetNode.id}`, title: customerName, type: 'customer' });
+              }
+            } else if (data.uiRoute === 'customers') {
+              openTab({ id: 'customers-module', title: 'Müşteriler', type: 'customers' });
+            } else if (data.uiRoute === 'inbox') {
+              openTab({ id: 'inbox-module', title: 'İletişim Merkezi', type: 'inbox' });
+            }
+          }
+
           if (data.actionProposal?.isApproved) {
             handleExecuteAction(data.actionProposal);
           }

@@ -267,6 +267,10 @@ KURALLAR:
             nodes = nodes.filter((n: any) => n.content?.toLowerCase().startsWith(prefix));
           }
           
+          if (args.module === 'customers' && nodes.length > 0) {
+            uiRoute = 'customer-' + nodes[0].id;
+          }
+
           const dataStr = nodes.length > 0
             ? nodes.map((n: any) => `[ID:${n.id}] ${n.content}`).join('\n')
             : `${args.module} modülünde "${args.searchQuery}" ile ilgili kayıt bulunamadı.`;
