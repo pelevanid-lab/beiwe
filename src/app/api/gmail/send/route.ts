@@ -57,8 +57,48 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: sendData.error?.message || 'Failed to send email' }, { status: sendRes.status });
     }
 
-    // At this point we could optionally save this sent message to Firestore
-    // For now we rely on Gmail placing it in the Sent folder and Webhook pulling it if configured.
+    // Fetch user email for Firestore record
+    let emailAddress = 'me';
+    try {
+      const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        emailAddress = profileData.emailAddress;
+      }
+    } catch(e) {}
+
+    // Save this sent message to Firestore immediately
+    try {
+      const { getAdminDb } = await import('@/lib/firebase-admin');
+      const adminDb = getAdminDb();
+      
+      const inboxMessage = {
+        id: sendData.id,
+        threadId: sendData.threadId,
+        sender: emailAddress,
+        to: to,
+        platform: 'gmail',
+        preview: (subject || 'Konusuz') + ' - ' + text,
+        timestamp: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+        createdAt: new Date().toISOString(),
+        unread: false,
+        folder: 'sent',
+        ownerEmail: emailAddress,
+        history: [
+          { 
+            sender: 'me', 
+            text: (subject ? `<${subject}> \n\n` : '') + text, 
+            time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) 
+          }
+        ]
+      };
+
+      await adminDb.collection('inbox_messages').doc(sendData.id).set(inboxMessage, { merge: true });
+    } catch(e) {
+      console.error('Failed to save sent message to Firestore:', e);
+    }
 
     return NextResponse.json({ success: true, messageId: sendData.id, threadId: sendData.threadId });
 
