@@ -21,7 +21,7 @@ const db = getFirestore();
 
 async function checkLogs() {
   console.log("Checking webhook_logs...");
-  const snapshot = await db.collection('webhook_logs').orderBy('timestamp', 'desc').get();
+  const snapshot = await db.collection('webhook_logs').limit(100).get();
   if (snapshot.empty) {
     console.log("No logs found. Webhook has not been hit yet.");
     return;

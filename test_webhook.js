@@ -65,6 +65,7 @@ async function runWebhook() {
     });
     const msgData = await msgRes.json();
     console.log("Msg status:", msgRes.status);
+    console.log("Labels:", msgData.labelIds);
   }
 }
 

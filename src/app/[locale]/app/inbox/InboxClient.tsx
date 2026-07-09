@@ -418,7 +418,9 @@ export default function InboxClient({ dict }: { dict: any }) {
         const docIds: string[] = (message as any).docIds || [message.id];
         const promises = docIds.map(docId => updateDoc(doc(db, 'inbox_messages', docId), { folder: 'archive' }));
         await Promise.all(promises);
-      } catch(e) {}
+      } catch(e) {
+        console.error('Firestore updateDoc error:', e);
+      }
 
       setArchiveModal(prev => ({ ...prev, isSaving: false, step: 'done' }));
       setSelectedMessageId(null);
