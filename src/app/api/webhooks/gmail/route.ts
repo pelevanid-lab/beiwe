@@ -33,30 +33,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true });
     }
 
-    let { access_token } = tokenDoc.data()!;
+    let { access_token, lastHistoryId } = tokenDoc.data()!;
 
-    // 1. Fetch History
-    const historyRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=${historyId}`, {
-      headers: { Authorization: `Bearer ${access_token}` }
-    });
-    
-    const historyData = await historyRes.json();
-    
-    if (!historyRes.ok) {
-      await adminDb.collection('webhook_logs').add({ error: 'History API Error', data: historyData });
-      return NextResponse.json({ success: true }); 
-    }
+    // Save the NEW historyId as the baseline for the NEXT webhook
+    await adminDb.collection('google_tokens').doc(emailAddress).set({ lastHistoryId: historyId }, { merge: true });
 
-    const newMessages: string[] = [];
-    if (historyData.history) {
-      historyData.history.forEach((hist: any) => {
-        if (hist.messagesAdded) {
-          hist.messagesAdded.forEach((msgInfo: any) => {
-            newMessages.push(msgInfo.message.id);
+    let newMessages: string[] = [];
+
+    if (lastHistoryId) {
+      // 1. Fetch History using the PREVIOUS historyId
+      const historyRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=${lastHistoryId}`, {
+        headers: { Authorization: `Bearer ${access_token}` }
+      });
+      
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        if (historyData.history) {
+          historyData.history.forEach((hist: any) => {
+            if (hist.messagesAdded) {
+              hist.messagesAdded.forEach((msgInfo: any) => {
+                newMessages.push(msgInfo.message.id);
+              });
+            }
           });
         }
+      } else {
+        // History ID might be expired (404), fallback to fetching latest messages
+        const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=3`, {
+          headers: { Authorization: `Bearer ${access_token}` }
+        });
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          newMessages = (listData.messages || []).map((m: any) => m.id);
+        }
+      }
+    } else {
+      // First webhook ever, no previous historyId, fallback to latest messages
+      const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=3`, {
+        headers: { Authorization: `Bearer ${access_token}` }
       });
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        newMessages = (listData.messages || []).map((m: any) => m.id);
+      }
     }
+
+    // Deduplicate in case history returned duplicates
+    newMessages = Array.from(new Set(newMessages));
 
     await adminDb.collection('webhook_logs').add({ info: 'New Messages Found', count: newMessages.length, newMessages });
 
