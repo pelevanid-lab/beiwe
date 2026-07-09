@@ -8,6 +8,7 @@ import { Save, X, ArrowLeft, Loader2, Bold, Italic, Strikethrough, Heading1, Hea
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthProvider';
+import { setClarityContext } from '@/lib/clarity-context';
 
 interface NativeDocEditorProps {
   initialDocId?: string;
@@ -122,6 +123,56 @@ export default function NativeDocEditor({ initialDocId, initialTitle, initialCon
       },
     },
   });
+
+  // Clarity Context'e belgenin içeriğini bildir (AI'nin okuyabilmesi için)
+  useEffect(() => {
+    if (!editor) return;
+
+    let timeoutId: NodeJS.Timeout;
+
+    const updateContext = () => {
+      // Debounce to prevent too many React re-renders
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        setClarityContext({
+          module: 'docs',
+          title: title || 'İsimsiz Doküman',
+          activeRecord: {
+            id: docId,
+            type: 'document',
+            summary: `Doküman Başlığı: ${title}\nİçerik:\n${editor.getText().slice(0, 4000)}`
+          },
+          data: {}
+        });
+      }, 1000);
+    };
+
+    updateContext(); // initial setup
+    
+    editor.on('update', updateContext);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      editor.off('update', updateContext);
+    };
+  }, [editor, title, docId]);
+
+  // AI tarafından yapılan güncellemeleri dinle
+  useEffect(() => {
+    const handleDocUpdated = (e: any) => {
+      if (e.detail && e.detail.id === docId && editor) {
+        if (e.detail.title) setTitle(e.detail.title);
+        if (e.detail.content && e.detail.content !== editor.getHTML()) {
+          editor.commands.setContent(e.detail.content);
+        }
+      }
+    };
+
+    window.addEventListener('docUpdated', handleDocUpdated as any);
+    return () => {
+      window.removeEventListener('docUpdated', handleDocUpdated as any);
+    };
+  }, [editor, docId]);
 
   const handleSave = async () => {
     if (!user || !editor) return;

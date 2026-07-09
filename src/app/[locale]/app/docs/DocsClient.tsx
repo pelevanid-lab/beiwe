@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, FileText, Plus, MoreVertical, LayoutGrid, List as ListIcon, Loader2, ArrowUpRight, X, CloudDownload } from 'lucide-react';
-import { fetchWithGoogleAuth } from '@/lib/google-api';
 import { db } from '@/lib/firebase';
+import { fetchWithGoogleAuth } from '@/lib/google-api';
+import { setClarityContext } from '@/lib/clarity-context';
 import { doc, setDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthProvider';
 import NativeDocEditor from './NativeDocEditor';
@@ -189,6 +190,16 @@ export default function DocsClient({ dict }: { dict: any }) {
 
       setDocs(allDocs);
       setLoading(false);
+      
+      // AI Bağlamı - Listedeki dokümanları AI'ya bildir
+      setClarityContext({
+        module: 'docs',
+        title: 'Dokümanlar Listesi',
+        data: {
+          docs: allDocs.map(d => ({ id: d.id, name: d.name, modifiedTime: d.modifiedTime, isNative: d.isNative })),
+          totalCount: allDocs.length
+        }
+      });
     };
 
     if (user) {

@@ -67,7 +67,7 @@ export function formatClarityContextForLLM(): string {
 
   if (_store.data) {
     // Sadece önemli özet bilgileri ekle, token tasarrufu için
-    const { customers, appointments, totalCount, upcomingCount } = _store.data;
+    const { customers, appointments, docs, totalCount, upcomingCount } = _store.data;
     if (customers && Array.isArray(customers)) {
       lines.push(`Ekrandaki Müşteri Sayısı: ${customers.length}`);
       const names = customers.slice(0, 10).map((c: any) => c.name || c.content?.replace('/customer ', '') || '?').join(', ');
@@ -75,6 +75,11 @@ export function formatClarityContextForLLM(): string {
     }
     if (appointments && Array.isArray(appointments)) {
       lines.push(`Ekrandaki Randevu Sayısı: ${appointments.length}`);
+    }
+    if (docs && Array.isArray(docs)) {
+      lines.push(`Ekrandaki Doküman Sayısı: ${docs.length}`);
+      const docNames = docs.slice(0, 10).map((d: any) => d.name || d.title || '?').join(', ');
+      lines.push(`Dokümanlar: ${docNames}${docs.length > 10 ? '...' : ''}`);
     }
     if (totalCount !== undefined) lines.push(`Toplam kayıt: ${totalCount}`);
     if (upcomingCount !== undefined) lines.push(`Yaklaşan: ${upcomingCount}`);

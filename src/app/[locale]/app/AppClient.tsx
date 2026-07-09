@@ -211,13 +211,29 @@ export default function AppClient({ dict }: { dict: any }) {
     }
   }, [query, isSearching, results]);
 
-  // History paneli toggle dinleyicisi
+  // History ve Route paneli toggle dinleyicisi
   useEffect(() => {
     const handleToggleHistory = () => {
       setIsHistoryOpen(prev => !prev);
     };
+    const handleRouteUI = (e: any) => {
+      const module = e.detail?.module;
+      if (module) {
+        if (module.startsWith('docs-')) {
+           const docId = module.replace('docs-', '');
+           openTab({ id: `docs-${docId}`, title: 'Doküman', type: 'docs', payload: { docId } });
+        } else if (module === 'docs') {
+           openTab({ id: 'docs-module', title: 'Dokümanlar', type: 'docs' });
+        }
+      }
+    };
+    
     window.addEventListener('toggleHistoryPanel', handleToggleHistory);
-    return () => window.removeEventListener('toggleHistoryPanel', handleToggleHistory);
+    window.addEventListener('routeUI', handleRouteUI as any);
+    return () => {
+      window.removeEventListener('toggleHistoryPanel', handleToggleHistory);
+      window.removeEventListener('routeUI', handleRouteUI as any);
+    };
   }, []);
 
   const handleSearch = async (e?: React.FormEvent, overrideQuery?: string) => {
@@ -560,6 +576,8 @@ export default function AppClient({ dict }: { dict: any }) {
 
           if (data.uiRoute) {
             const customerMatch = data.uiRoute.match(/customer-(.+)/);
+            const docsMatch = data.uiRoute.match(/docs-(.+)/);
+            
             if (customerMatch) {
               const targetNode = combinedNodes.find((n: any) => n.id === customerMatch[1]);
               if (targetNode) {
@@ -567,6 +585,8 @@ export default function AppClient({ dict }: { dict: any }) {
                 const customerName = match ? match[1].trim() : 'Müşteri';
                 openTab({ id: `customer-${targetNode.id}`, title: customerName, type: 'customer' });
               }
+            } else if (docsMatch) {
+              openTab({ id: `docs-${docsMatch[1]}`, title: 'Doküman', type: 'docs', payload: { docId: docsMatch[1] } });
             } else if (data.uiRoute === 'customers') {
               openTab({ id: 'customers-module', title: 'Müşteriler', type: 'customers' });
             } else if (data.uiRoute === 'inbox') {

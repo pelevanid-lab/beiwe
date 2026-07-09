@@ -39,15 +39,15 @@ const writeBeiweDataTool: FunctionDeclaration = {
     properties: {
       module: {
         type: SchemaType.STRING,
-        description: 'Which module to write to: customers, appointments, notes',
+        description: 'Module name to write data to. Must be one of: customers, appointments, notes, docs',
       },
       operation: {
         type: SchemaType.STRING,
-        description: 'Operation type: create, update, delete',
+        description: 'Operation to perform: create, update, delete',
       },
       payload: {
         type: SchemaType.STRING,
-        description: 'JSON string with the data to write. For appointments: {title, customer, start, end}. For customers: {name, details}. For notes: {content, customerId}.',
+        description: 'JSON string with the data to write. For appointments: {title, customer, start, end}. For customers: {name, details}. For notes: {content, customerId}. For docs: {title, content, docId?}.',
       }
     },
     required: ['module', 'operation', 'payload']
@@ -236,6 +236,7 @@ KURALLAR:
             customers: '/customer',
             appointments: '/appointment',
             notes: '/note',
+            docs: '/doc', // Assuming docs might be stored with /doc prefix in memory, though we read docs from Firestore directly mostly
           };
           const prefix = modulePrefix[args.module];
           
@@ -313,6 +314,8 @@ KURALLAR:
           'appointments-delete': 'delete_appointment',
           'notes-create': 'add_note',
           'notes-delete': 'delete_note',
+          'docs-create': 'create_doc',
+          'docs-update': 'update_doc',
         };
         const actionKey = `${args.module}-${args.operation}`;
         const legacyActionName = actionMap[actionKey];
