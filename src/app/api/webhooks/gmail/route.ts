@@ -115,7 +115,11 @@ export async function POST(request: Request) {
         folder: msgData.labelIds?.includes('SENT') ? 'sent' : 'inbox',
         ownerEmail: emailAddress,
         history: [
-          { sender: 'them', text: subject + '\n\n' + textBody, time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) }
+          { 
+            sender: msgData.labelIds?.includes('SENT') ? 'me' : 'them', 
+            text: subject + '\n\n' + textBody, 
+            time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) 
+          }
         ]
       };
 

@@ -18,6 +18,7 @@ type InboxMessage = {
   history: ChatMessage[];
   contact?: string; // email or phone number
   folder: 'inbox' | 'sent' | 'drafts' | 'spam' | 'archive';
+  threadId?: string;
 };
 
 const INTEGRATIONS = [
@@ -50,13 +51,28 @@ export default function InboxClient({ dict }: { dict: any }) {
     const q = query(collection(db, 'inbox_messages'), orderBy('createdAt', 'desc'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedMessages: InboxMessage[] = [];
+      const groups = new Map<string, InboxMessage>();
+
       snapshot.forEach((doc) => {
-        fetchedMessages.push({ id: doc.id, ...doc.data() } as InboxMessage);
+        const msg = { id: doc.id, ...doc.data() } as InboxMessage;
+        
+        // Group by threadId if available, fallback to sender
+        const groupKey = msg.threadId || msg.sender;
+        
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, msg);
+        } else {
+          const existing = groups.get(groupKey)!;
+          // Prepend older history to the newest message's history
+          existing.history = [...msg.history, ...existing.history];
+          // If the older message was unread, we might want to keep the whole thread unread? 
+          // (Usually the newest message's unread status defines the thread's status, so we leave it)
+        }
       });
       
+      const fetchedMessages = Array.from(groups.values());
+      
       setMessages(prev => {
-        // Merge drafts with fetched messages to keep drafts on top until sent
         const drafts = prev.filter(m => m.id.startsWith('draft-'));
         return [...drafts, ...fetchedMessages];
       });
@@ -156,8 +172,9 @@ export default function InboxClient({ dict }: { dict: any }) {
           },
           body: JSON.stringify({
             to: selectedMessage.contact || selectedMessage.sender,
-            subject: 'Re: ' + selectedMessage.preview.split('-')[0], // Basic subject extract
-            text: replyText
+            subject: selectedMessage.preview.split('-')[0].trim().startsWith('Re:') ? selectedMessage.preview.split('-')[0].trim() : 'Re: ' + selectedMessage.preview.split('-')[0].trim(),
+            text: replyText,
+            threadId: selectedMessage.threadId || selectedMessage.id
           })
         });
         
