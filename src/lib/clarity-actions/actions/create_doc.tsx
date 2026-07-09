@@ -36,7 +36,7 @@ export const CreateDocAction: ClarityAction = {
       await setDoc(docRef, {
         title: payload.title,
         content: payload.content,
-        ownerId: context.userId,
+        ownerId: context.user.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         type: 'document'
