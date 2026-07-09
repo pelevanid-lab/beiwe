@@ -198,7 +198,7 @@ export default function InboxClient({ dict }: { dict: any }) {
           defaultSubject = splitPrev.startsWith('Re:') ? splitPrev : 'Re: ' + splitPrev;
         }
 
-        const res = await fetch('/api/gmail/send', {
+        let res = await fetch('/api/gmail/send', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -212,9 +212,53 @@ export default function InboxClient({ dict }: { dict: any }) {
           })
         });
         
-        if (!res.ok) {
-          const err = await res.json();
-          alert('E-posta gönderilemedi: ' + err.error);
+        if (res.status === 401 || !res.ok) {
+          const errText = await res.text();
+          let err;
+          try { err = JSON.parse(errText); } catch(e) { err = { error: errText }; }
+          
+          if (res.status === 401 || (err.error && err.error.includes('authentication credentials'))) {
+            // Try to refresh token
+            const refreshToken = localStorage.getItem('google_refresh_token');
+            if (refreshToken) {
+              const refreshRes = await fetch('/api/auth/google/refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshToken })
+              });
+              
+              if (refreshRes.ok) {
+                const refreshData = await refreshRes.json();
+                localStorage.setItem('google_access_token', refreshData.access_token);
+                
+                // Retry the request
+                res = await fetch('/api/gmail/send', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${refreshData.access_token}`
+                  },
+                  body: JSON.stringify({
+                    to: selectedMessage.contact || selectedMessage.sender,
+                    subject: customSubject || defaultSubject,
+                    text: finalReplyText,
+                    threadId: selectedMessage.threadId || selectedMessage.id
+                  })
+                });
+                
+                if (!res.ok) {
+                  const retryErr = await res.json();
+                  alert('E-posta gönderilemedi: ' + retryErr.error);
+                }
+              } else {
+                alert('Oturum süreniz dolmuş. Lütfen Entegrasyonlar sayfasından Gmail hesabınızı tekrar bağlayın.');
+              }
+            } else {
+              alert('Oturum süreniz dolmuş. Lütfen Entegrasyonlar sayfasından Gmail hesabınızı tekrar bağlayın.');
+            }
+          } else {
+            alert('E-posta gönderilemedi: ' + err.error);
+          }
         }
       }
       
