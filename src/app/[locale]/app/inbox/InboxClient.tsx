@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, MessageCircle, Mail, Camera, Send, Filter, MoreVertical, Archive, Trash2, Reply, Send as SendIcon, Inbox, SendHorizontal, FileText, AlertCircle, Phone, Globe } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
@@ -45,6 +45,11 @@ export default function InboxClient({ dict }: { dict: any }) {
   const [activeFolder, setActiveFolder] = useState('all');
 
   const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [selectedMessageId, messages]);
 
   // Firestore Real-time Listener for Webhook Data
   useEffect(() => {
@@ -432,6 +437,7 @@ export default function InboxClient({ dict }: { dict: any }) {
                   </div>
                 ))
               )}
+              <div ref={messagesEndRef} />
             </div>
           </div>
         ) : (
