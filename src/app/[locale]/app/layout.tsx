@@ -19,7 +19,7 @@ export default async function AppLayout({
 
   return (
     <AuthProvider>
-      <div className="min-h-screen bg-[var(--color-paper)] text-[var(--color-ink)] flex font-sans">
+      <div className="h-screen bg-[var(--color-paper)] text-[var(--color-ink)] flex font-sans">
         {/* Left Sidebar */}
         <Sidebar dict={dict.app} />
 
