@@ -712,14 +712,9 @@ export default function InboxClient({ dict }: { dict: any }) {
                     <UserPlus size={18}/>
                     {archiveModal.isSaving ? 'Kaydediliyor...' : 'Müşteri Olarak Kaydet ve Arşivle'}
                   </button>
-                  <button
-                    onClick={doArchive}
-                    disabled={archiveModal.isSaving}
-                    className="w-full py-3 border border-[var(--color-ink)]/10 rounded-2xl font-semibold text-[var(--color-ink-light)] hover:bg-gray-50 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-                  >
-                    <Archive size={16}/>
-                    Müşteri Kaydetmeden Yalnızca Arşivle
-                  </button>
+                  <p className="text-xs text-center text-[var(--color-ink-light)] px-2">
+                    Arşivlemek için önce bu kişiyi müşteri olarak kaydetmelisiniz. İptal etmek için sağ üstteki X butonuna tıklayın.
+                  </p>
                 </div>
               </>
             )}

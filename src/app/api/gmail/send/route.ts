@@ -96,6 +96,23 @@ export async function POST(request: Request) {
       };
 
       await adminDb.collection('inbox_messages').doc(sendData.id).set(inboxMessage, { merge: true });
+
+      // If recipient has an archived conversation, restore it to 'sent' so new exchange is visible
+      try {
+        const recipientEmail = to.toLowerCase().replace(/.*<(.+)>.*/, '$1');
+        const archivedSnap = await adminDb.collection('inbox_messages')
+          .where('folder', '==', 'archive')
+          .get();
+        for (const archivedDoc of archivedSnap.docs) {
+          const archivedData = archivedDoc.data();
+          const archivedContact = (archivedData.contact || archivedData.sender || '').toLowerCase().replace(/.*<(.+)>.*/, '$1');
+          if (archivedContact === recipientEmail && archivedData.ownerEmail === emailAddress) {
+            await archivedDoc.ref.update({ folder: 'sent' });
+          }
+        }
+      } catch(e) {
+        console.error('Failed to restore archived conversation:', e);
+      }
     } catch(e) {
       console.error('Failed to save sent message to Firestore:', e);
     }

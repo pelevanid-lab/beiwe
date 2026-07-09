@@ -160,6 +160,31 @@ export async function POST(request: Request) {
 
       await adminDb.collection('inbox_messages').doc(msgData.id).set(inboxMessage, { merge: true });
       await adminDb.collection('webhook_logs').add({ info: 'Successfully saved message', msgId });
+
+      // If there's an existing ARCHIVED conversation from this sender, restore it to inbox
+      // so the new message is visible to the user again
+      try {
+        const senderEmail = from.match(/<(.+)>/) ? from.match(/<(.+)>/)![1].toLowerCase() : from.toLowerCase();
+        const archivedSnap = await adminDb.collection('inbox_messages')
+          .where('folder', '==', 'archive')
+          .get();
+        for (const archivedDoc of archivedSnap.docs) {
+          const archivedData = archivedDoc.data();
+          const archivedSenderEmail = (archivedData.sender || '').match(/<(.+)>/)
+            ? (archivedData.sender || '').match(/<(.+)>/)![1].toLowerCase()
+            : (archivedData.sender || '').toLowerCase();
+          if (archivedSenderEmail === senderEmail && archivedData.ownerEmail === emailAddress) {
+            await archivedDoc.ref.update({ folder: 'inbox' });
+            await adminDb.collection('webhook_logs').add({ 
+              info: 'Restored archived conversation to inbox for new message', 
+              senderEmail 
+            });
+          }
+        }
+      } catch(e) {
+        // Non-critical, just log
+        await adminDb.collection('webhook_logs').add({ warn: 'Failed to check archived conversations', error: String(e) });
+      }
     }
 
     return NextResponse.json({ success: true });
