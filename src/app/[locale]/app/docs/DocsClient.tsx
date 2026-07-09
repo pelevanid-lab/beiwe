@@ -98,8 +98,7 @@ export default function DocsClient({ dict }: { dict: any }) {
           const q = query(
             collection(db, 'beiwe_docs'),
             where('ownerId', '==', user.uid),
-            where('type', '==', 'document'),
-            orderBy('updatedAt', 'desc')
+            where('type', '==', 'document')
           );
           const snapshot = await getDocs(q);
           const nativeDocs: GoogleDoc[] = snapshot.docs.map(doc => {
@@ -115,6 +114,14 @@ export default function DocsClient({ dict }: { dict: any }) {
               content: data.content
             };
           });
+          
+          // Sort in memory to avoid needing a Firestore composite index
+          nativeDocs.sort((a, b) => {
+            const timeA = snapshot.docs.find(d => d.id === a.id)?.data().updatedAt?.toMillis() || 0;
+            const timeB = snapshot.docs.find(d => d.id === b.id)?.data().updatedAt?.toMillis() || 0;
+            return timeB - timeA;
+          });
+
           allDocs = [...nativeDocs, ...allDocs];
         } catch (error) {
           console.error("Fetch Native Docs Error:", error);
@@ -142,7 +149,7 @@ export default function DocsClient({ dict }: { dict: any }) {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-[var(--color-ink)] tracking-tight">Dokümanlar</h1>
-              <p className="text-[var(--color-ink-light)] text-sm mt-1">Google Dokümanlarınızla senkronize çalışın.</p>
+              <p className="text-[var(--color-ink-light)] text-sm mt-1">Yerel Beiwe dokümanlarınız ve dış entegrasyonlar.</p>
             </div>
           </div>
           <div className="flex gap-3">
@@ -197,7 +204,11 @@ export default function DocsClient({ dict }: { dict: any }) {
                   </div>
                   <div className="p-4 flex-1 flex flex-col">
                     <div className="flex items-start gap-3 mb-2">
-                      <img src={doc.iconLink} alt="Docs" className="w-5 h-5 shrink-0" />
+                      {doc.isNative ? (
+                        <FileText className="w-5 h-5 shrink-0 text-orange-500" />
+                      ) : (
+                        <img src={doc.iconLink} alt="Docs" className="w-5 h-5 shrink-0" />
+                      )}
                       <h3 className="font-semibold text-[var(--color-ink)] text-sm line-clamp-2 leading-snug group-hover:text-blue-600 transition-colors">
                         {doc.name}
                       </h3>
@@ -213,7 +224,11 @@ export default function DocsClient({ dict }: { dict: any }) {
               ) : (
                 // List Item
                 <div key={doc.id} onClick={() => doc.isNative ? setEditingNativeDoc(doc) : setPreviewDoc(doc)} className="group bg-white border border-[var(--color-ink)]/10 rounded-xl p-3 flex items-center gap-4 hover:shadow-md transition-all hover:border-blue-500/30 cursor-pointer">
-                  <img src={doc.iconLink} alt="Docs" className="w-6 h-6 shrink-0 ml-2" />
+                  {doc.isNative ? (
+                    <FileText className="w-6 h-6 shrink-0 ml-2 text-orange-500" />
+                  ) : (
+                    <img src={doc.iconLink} alt="Docs" className="w-6 h-6 shrink-0 ml-2" />
+                  )}
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-[var(--color-ink)] text-sm truncate group-hover:text-blue-600 transition-colors">
                       {doc.name}
