@@ -19,7 +19,7 @@ import { CLARITY_ACTIONS } from '@/lib/clarity-actions/registry';
 import AppointmentsClient from './appointments/AppointmentsClient';
 import CustomersClient from './customers/CustomersClient';
 import CustomerDetailClient from './customers/[id]/CustomerDetailClient';
-
+import InboxClient from './inbox/InboxClient';
 export default function AppClient({ dict }: { dict: any }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1330,6 +1330,7 @@ export default function AppClient({ dict }: { dict: any }) {
                     {tab.type === 'appointments' && <AppointmentsClient dict={dict} />}
                     {tab.type === 'notes' && <div className="p-8 text-center text-gray-400 text-sm">Not modülü yakında.</div>}
                     {tab.type === 'docs' && <div className="p-8 text-center text-gray-400 text-sm">Döküman modülü yakında.</div>}
+                    {tab.type === 'inbox' && <InboxClient dict={dict} />}
                   </div>
                 ))}
               </div>
