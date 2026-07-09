@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, Plus, MoreVertical, LayoutGrid, List as ListIcon, Loader2, ArrowUpRight, X } from 'lucide-react';
+import { Search, FileText, Plus, MoreVertical, LayoutGrid, List as ListIcon, Loader2, ArrowUpRight, X, CloudDownload } from 'lucide-react';
 import { fetchWithGoogleAuth } from '@/lib/google-api';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthProvider';
 import NativeDocEditor from './NativeDocEditor';
 
@@ -61,36 +61,95 @@ export default function DocsClient({ dict }: { dict: any }) {
   const [previewDoc, setPreviewDoc] = useState<GoogleDoc | null>(null);
   const [editingNativeDoc, setEditingNativeDoc] = useState<GoogleDoc | null>(null);
   const [showNewDocEditor, setShowNewDocEditor] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [googleDocsList, setGoogleDocsList] = useState<GoogleDoc[]>([]);
+  const [selectedGoogleDocs, setSelectedGoogleDocs] = useState<string[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const { user } = useAuth();
+
+  // Load Google Docs for the Modal
+  const handleOpenImportModal = async () => {
+    setShowImportModal(true);
+    setImportError(null);
+    setSelectedGoogleDocs([]);
+    
+    // Only fetch if empty to save API calls
+    if (googleDocsList.length === 0) {
+      try {
+        const res = await fetchWithGoogleAuth('/api/docs/list');
+        const data = await res.json();
+        if (data.success && data.files) {
+          const formatted = data.files.map((file: any) => ({
+            id: file.id,
+            name: file.name,
+            modifiedTime: new Date(file.modifiedTime).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' }),
+            iconLink: file.iconLink,
+          }));
+          setGoogleDocsList(formatted);
+        } else {
+          setImportError('Google Dokümanlar alınamadı.');
+        }
+      } catch (error: any) {
+        setImportError(error.message || 'Bağlantı hatası.');
+      }
+    }
+  };
+
+  const handleImportSelected = async () => {
+    if (selectedGoogleDocs.length === 0 || !user) return;
+    
+    setIsImporting(true);
+    setImportError(null);
+    
+    try {
+      let importedCount = 0;
+      for (const docId of selectedGoogleDocs) {
+        const docInfo = googleDocsList.find(d => d.id === docId);
+        if (!docInfo) continue;
+
+        // 1. Fetch HTML content
+        const exportRes = await fetchWithGoogleAuth(`/api/docs/export?fileId=${docId}`);
+        const exportData = await exportRes.json();
+        
+        if (!exportData.success) {
+          console.error('Export failed for', docInfo.name, exportData.error);
+          continue; // skip failed ones
+        }
+
+        // 2. Save to Firebase as Native Doc
+        const newNativeDocRef = doc(collection(db, 'beiwe_docs'));
+        await setDoc(newNativeDocRef, {
+          title: docInfo.name,
+          content: exportData.html || '',
+          ownerId: user.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          type: 'document'
+        });
+        
+        importedCount++;
+      }
+      
+      if (importedCount > 0) {
+        setShowImportModal(false);
+        // Force refresh the list (useEffect depends on showImportModal)
+      } else {
+        setImportError('Hiçbir doküman başarıyla aktarılamadı.');
+      }
+    } catch (error: any) {
+      setImportError(error.message || 'İçe aktarma sırasında bir hata oluştu.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   // Simulate API fetch from our real Google Sync endpoint
   useEffect(() => {
     const fetchDocs = async () => {
       setLoading(true);
-      const token = localStorage.getItem('google_access_token');
       
       let allDocs: GoogleDoc[] = [];
-
-      // 1. Fetch Google Docs
-      if (token) {
-        try {
-          const res = await fetchWithGoogleAuth('/api/docs/list');
-          const data = await res.json();
-          if (data.success && data.files) {
-            allDocs = data.files.map((file: any) => ({
-              id: file.id,
-              name: file.name,
-              modifiedTime: new Date(file.modifiedTime).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' }),
-              webViewLink: file.webViewLink,
-              iconLink: file.iconLink,
-              owner: file.owners && file.owners.length > 0 ? file.owners[0].displayName : 'Bilinmeyen',
-              isNative: false
-            }));
-          }
-        } catch (error) {
-          console.error("Fetch Google Docs Error:", error);
-        }
-      }
 
       // 2. Fetch Native Beiwe Docs
       if (user) {
@@ -135,7 +194,7 @@ export default function DocsClient({ dict }: { dict: any }) {
     if (user) {
       fetchDocs();
     }
-  }, [user, showNewDocEditor, editingNativeDoc]); // re-fetch when closing editors
+  }, [user, showNewDocEditor, editingNativeDoc, showImportModal]); // re-fetch when closing editors or modals
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-paper)] p-8 overflow-y-auto w-full relative">
@@ -155,6 +214,12 @@ export default function DocsClient({ dict }: { dict: any }) {
           <div className="flex gap-3">
             <button className="bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm">
               <Search size={18} /> Ara
+            </button>
+            <button 
+              onClick={handleOpenImportModal}
+              className="bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              <CloudDownload size={18} /> Google'dan Aktar
             </button>
             <button onClick={() => setShowNewDocEditor(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20">
               <Plus size={18} /> Yeni Doküman
@@ -250,14 +315,111 @@ export default function DocsClient({ dict }: { dict: any }) {
             {!loading && docs.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center py-10 text-[var(--color-ink-light)]">
                 <FileText size={48} className="opacity-20 mb-4" />
-                <p>Hiçbir doküman bulunamadı veya bağlantı izni yok.</p>
-                <p className="text-sm mt-1">Lütfen Ayarlar &gt; Entegrasyonlar sekmesinden Google Dokümanlar iznini verdiğinizden emin olun.</p>
+                <p>Henüz hiçbir yerel dokümanınız yok.</p>
+                <p className="text-sm mt-1">"Google'dan Aktar" butonuyla mevcut dosyalarınızı getirebilir veya Yeni Doküman oluşturabilirsiniz.</p>
               </div>
             )}
           </div>
         )}
-
       </div>
+
+      {/* Import Docs Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 max-h-[85vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                  <CloudDownload size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-[var(--color-ink)] text-lg">Google'dan İçe Aktar</h3>
+                  <p className="text-xs text-[var(--color-ink-light)]">Google Drive'daki metin belgelerinizi Beiwe'ye kopyalayın.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowImportModal(false)}
+                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto flex-1">
+              {importError && (
+                <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-xl text-sm flex flex-col gap-2">
+                  <span className="font-semibold">Hata</span>
+                  <span>{importError}</span>
+                  <button 
+                    onClick={() => setGoogleDocsList([])} 
+                    className="text-red-700 underline text-xs w-fit"
+                  >
+                    Tekrar Dene
+                  </button>
+                </div>
+              )}
+
+              {googleDocsList.length === 0 && !importError ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-4" />
+                  <p className="text-[var(--color-ink-light)] font-medium">Google Drive'ınız taranıyor...</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {googleDocsList.map(doc => {
+                    const isSelected = selectedGoogleDocs.includes(doc.id);
+                    return (
+                      <div 
+                        key={doc.id}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedGoogleDocs(prev => prev.filter(id => id !== doc.id));
+                          } else {
+                            setSelectedGoogleDocs(prev => [...prev, doc.id]);
+                          }
+                        }}
+                        className={`flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-all ${isSelected ? 'border-blue-500 bg-blue-50/50' : 'border-gray-100 hover:border-blue-200'}`}
+                      >
+                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300'}`}>
+                          {isSelected && <svg viewBox="0 0 14 14" fill="none" className="w-3 h-3"><path d="M3 7.5L5.5 10L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </div>
+                        <img src={doc.iconLink} alt="icon" className="w-5 h-5" />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium truncate ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>{doc.name}</p>
+                          <p className="text-xs text-gray-500">Son değişiklik: {doc.modifiedTime}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 shrink-0">
+              <button 
+                onClick={() => setShowImportModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                İptal
+              </button>
+              <button 
+                onClick={handleImportSelected}
+                disabled={selectedGoogleDocs.length === 0 || isImporting}
+                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl transition-colors shadow-sm flex items-center gap-2"
+              >
+                {isImporting ? (
+                  <><Loader2 size={16} className="animate-spin" /> Aktarılıyor...</>
+                ) : (
+                  <>Seçilenleri İçe Aktar ({selectedGoogleDocs.length})</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fullscreen Document Preview Modal */}
       {previewDoc && (
