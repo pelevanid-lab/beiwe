@@ -55,9 +55,11 @@ export default function InboxClient({ dict }: { dict: any }) {
     open: boolean;
     message: InboxMessage | null;
     matchedCustomer: { id: string; name: string } | null;
+    candidateCustomers: { id: string; name: string; matchReason: string }[];
+    selectedCandidateId: string | null;
     isSaving: boolean;
-    step: 'confirm' | 'no_customer' | 'done';
-  }>({ open: false, message: null, matchedCustomer: null, isSaving: false, step: 'confirm' });
+    step: 'confirm' | 'select_customer' | 'no_customer' | 'done';
+  }>({ open: false, message: null, matchedCustomer: null, candidateCustomers: [], selectedCandidateId: null, isSaving: false, step: 'confirm' });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -288,90 +290,146 @@ export default function InboxClient({ dict }: { dict: any }) {
     }
   };
 
+  const extractEmailStr = (str: string) => {
+    const m = str.match(/<(.+)>/);
+    return m ? m[1].toLowerCase() : str.toLowerCase();
+  };
+
   const handleArchive = async (msg: InboxMessage) => {
-    // Extract plain email from sender string like "Name <email>"
-    const extractEmailStr = (str: string) => {
-      const m = str.match(/<(.+)>/);
-      return m ? m[1].toLowerCase() : str.toLowerCase();
-    };
     const contactEmail = extractEmailStr(msg.contact || msg.sender);
     const contactName = msg.sender.replace(/<.*>/, '').trim() || contactEmail;
 
-    // Search for matching customer in Saule
-    let matchedCustomer: { id: string; name: string } | null = null;
+    // Multi-criteria customer search in Saule
+    const candidates: { id: string; name: string; matchReason: string }[] = [];
     try {
       const apiUrl = process.env.NEXT_PUBLIC_SAULE_API_URL || 'https://us-central1-saule-core.cloudfunctions.net/api';
       const res = await fetch(`${apiUrl}/api/smi/nodes?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        const allNodes = data.nodes || [];
-        const match = allNodes.find((n: any) =>
-          n.spaceId === user?.uid &&
-          n.content &&
-          n.content.toLowerCase().includes(contactEmail)
+        const allNodes = (data.nodes || []).filter((n: any) => 
+          n.spaceId === user?.uid && n.content && n.content.match(/\/(?:customer|müşteri)\s/i)
         );
-        if (match) {
-          const nameMatch = match.content.match(/\/customer\s+(.+)/);
-          matchedCustomer = { id: match.id, name: nameMatch ? nameMatch[1].trim() : contactName };
+
+        for (const n of allNodes) {
+          const content = n.content.toLowerCase();
+          const nameMatch = n.content.match(/\/(?:customer|müşteri)\s+([^-]+)/i);
+          const customerName = nameMatch ? nameMatch[1].trim() : '';
+          const reasons: string[] = [];
+
+          // Email match
+          if (contactEmail && content.includes(contactEmail.replace('@', '[at]').replace('.', '[dot]')) ||
+              contactEmail && content.includes(contactEmail)) {
+            reasons.push('E-posta eşleşti');
+          }
+          // Name match (fuzzy: check if any word in sender name appears in customer name)
+          const senderWords = contactName.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+          if (senderWords.some(w => customerName.toLowerCase().includes(w))) {
+            reasons.push('İsim benzerliği');
+          }
+          // Instagram match: sender might be an @username
+          if (msg.platform === 'instagram') {
+            const handle = contactName.replace('@', '').toLowerCase();
+            const instaMatch = n.content.match(/- Instagram:\s*@?([^\s-]+)/i);
+            if (instaMatch && instaMatch[1].toLowerCase() === handle) {
+              reasons.push('Instagram eşleşti');
+            }
+          }
+          // Phone match (sender string might contain phone)
+          const phoneInSender = (msg.contact || msg.sender).replace(/\D/g, '');
+          if (phoneInSender.length >= 10) {
+            const phoneInContent = n.content.replace(/\D/g, '');
+            if (phoneInContent.includes(phoneInSender.slice(-10))) {
+              reasons.push('Telefon eşleşti');
+            }
+          }
+
+          if (reasons.length > 0) {
+            candidates.push({ id: n.id, name: customerName, matchReason: reasons.join(', ') });
+          }
         }
       }
     } catch (e) {
       console.error('Customer search failed:', e);
     }
 
-    setArchiveModal({
-      open: true,
-      message: msg,
-      matchedCustomer,
-      isSaving: false,
-      step: matchedCustomer ? 'confirm' : 'no_customer',
-    });
+    // Deduplicate by id
+    const uniqueCandidates = candidates.filter((c, i, arr) => arr.findIndex(x => x.id === c.id) === i);
+
+    if (uniqueCandidates.length === 1) {
+      // Single exact match → go straight to confirm
+      setArchiveModal({
+        open: true, message: msg,
+        matchedCustomer: uniqueCandidates[0],
+        candidateCustomers: [],
+        selectedCandidateId: uniqueCandidates[0].id,
+        isSaving: false, step: 'confirm',
+      });
+    } else if (uniqueCandidates.length > 1) {
+      // Multiple matches → let user select
+      setArchiveModal({
+        open: true, message: msg,
+        matchedCustomer: null,
+        candidateCustomers: uniqueCandidates,
+        selectedCandidateId: null,
+        isSaving: false, step: 'select_customer',
+      });
+    } else {
+      setArchiveModal({
+        open: true, message: msg,
+        matchedCustomer: null,
+        candidateCustomers: [],
+        selectedCandidateId: null,
+        isSaving: false, step: 'no_customer',
+      });
+    }
   };
 
-  const doArchive = async () => {
+  const doArchive = async (overrideCustomer?: { id: string; name: string }) => {
     const { message, matchedCustomer } = archiveModal;
     if (!message || !user) return;
     setArchiveModal(prev => ({ ...prev, isSaving: true }));
 
-    const extractEmailStr = (str: string) => {
-      const m = str.match(/<(.+)>/);
-      return m ? m[1].toLowerCase() : str.toLowerCase();
-    };
     const contactEmail = extractEmailStr(message.contact || message.sender);
     const contactName = message.sender.replace(/<.*>/, '').trim() || contactEmail;
     const historyText = message.history.map(h => `[${h.sender === 'me' ? 'Ben' : contactName}] ${h.text}`).join('\n');
+    const customer = overrideCustomer || matchedCustomer;
 
     try {
       const { ingestMemory } = await import('@/lib/saule-core-client');
 
-      // Save conversation as memory in Saule
-      const noteContent = matchedCustomer
-        ? `/note Müşteri: ${matchedCustomer.name} - İletişim Merkezi konuşması arşivlendi (${message.platform}, ${contactEmail}):\n\n${historyText}`
-        : `/note Müşteri: ${contactName} - İletişim Merkezi konuşması arşivlendi (${message.platform}, ${contactEmail}):\n\n${historyText}`;
-
+      // 1. Save as a note attached to customer (shows in Geçmiş & Etkileşimler)
+      const noteContent = `/note Müşteri: ${customer?.name || contactName} - İletişim Merkezi konuşması arşivlendi (${message.platform}, ${contactEmail}):\n\n${historyText}`;
       await ingestMemory(
         noteContent,
-        'action',
-        { source: 'inbox_archive', author: user.uid, contactEmail, platform: message.platform, createdAt: Date.now() },
+        'knowledge',
+        { source: 'inbox_archive', author: user.uid, contactEmail, platform: message.platform, archivedAt: new Date().toISOString() },
         'fact',
         'personal',
         user.uid
       );
 
-      // Update message folder to 'archive' in Firestore
+      // 2. Update Firestore message folder to archive
+      // Update ALL messages from this contact (grouped conversation)
+      // The message.id is the groupKey (contact email), real Firestore docs need filtering
       try {
-        await updateDoc(doc(db, 'inbox_messages', message.id === archiveModal.message?.id ? message.id : message.id), {
-          folder: 'archive'
-        });
+        await updateDoc(doc(db, 'inbox_messages', message.id), { folder: 'archive' });
       } catch(e) {}
 
       setArchiveModal(prev => ({ ...prev, isSaving: false, step: 'done' }));
       setSelectedMessageId(null);
-      setTimeout(() => setArchiveModal({ open: false, message: null, matchedCustomer: null, isSaving: false, step: 'confirm' }), 1500);
+      setTimeout(() => setArchiveModal({ open: false, message: null, matchedCustomer: null, candidateCustomers: [], selectedCandidateId: null, isSaving: false, step: 'confirm' }), 1800);
     } catch(e) {
       console.error('Archive failed:', e);
       setArchiveModal(prev => ({ ...prev, isSaving: false }));
     }
+  };
+
+  const doArchiveWithSelected = async () => {
+    const { candidateCustomers, selectedCandidateId } = archiveModal;
+    const selected = candidateCustomers.find(c => c.id === selectedCandidateId);
+    if (!selected) return;
+    setArchiveModal(prev => ({ ...prev, matchedCustomer: selected, step: 'confirm' }));
+    await doArchive(selected);
   };
 
   const doSaveCustomerAndArchive = async () => {
@@ -379,10 +437,6 @@ export default function InboxClient({ dict }: { dict: any }) {
     if (!message || !user) return;
     setArchiveModal(prev => ({ ...prev, isSaving: true }));
 
-    const extractEmailStr = (str: string) => {
-      const m = str.match(/<(.+)>/);
-      return m ? m[1].toLowerCase() : str.toLowerCase();
-    };
     const contactEmail = extractEmailStr(message.contact || message.sender);
     const contactName = message.sender.replace(/<.*>/, '').trim() || contactEmail;
 
@@ -390,15 +444,15 @@ export default function InboxClient({ dict }: { dict: any }) {
       const { ingestMemory } = await import('@/lib/saule-core-client');
       // Save as new customer
       await ingestMemory(
-        `/customer ${contactName} - E-posta: ${contactEmail}`,
+        `/customer ${contactName} - E-posta: ${contactEmail.replace('@','[AT]').replace('.','[DOT]')}`,
         'action',
         { source: 'inbox_archive', author: user.uid, createdAt: Date.now() },
         'fact',
         'personal',
         user.uid
       );
-      // Now archive
-      await doArchive();
+      // Now archive with the new customer name
+      await doArchive({ id: 'new', name: contactName });
     } catch(e) {
       console.error('Save customer failed:', e);
       setArchiveModal(prev => ({ ...prev, isSaving: false }));
@@ -642,8 +696,53 @@ export default function InboxClient({ dict }: { dict: any }) {
                   <CheckCircle size={32} className="text-green-500" />
                 </div>
                 <p className="text-lg font-bold text-[var(--color-ink)]">Konuşma arşivlendi!</p>
-                <p className="text-sm text-[var(--color-ink-light)] text-center">Saule belleğine kaydedildi.</p>
+                <p className="text-sm text-[var(--color-ink-light)] text-center">Saule belleğine kaydedildi ve müşteri geçmişine eklendi.</p>
               </div>
+            ) : archiveModal.step === 'select_customer' ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center">
+                    <UserPlus size={22} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-[var(--color-ink)] text-lg">Müşteriyi Seçin</h3>
+                    <p className="text-sm text-[var(--color-ink-light)]">Birden fazla eşleşme bulundu, hangisiyle ilişkilendirilsin?</p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+                  {archiveModal.candidateCustomers.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => setArchiveModal(prev => ({ ...prev, selectedCandidateId: c.id }))}
+                      className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-3 ${
+                        archiveModal.selectedCandidateId === c.id
+                          ? 'border-[var(--color-burnt-orange)] bg-orange-50'
+                          : 'border-[var(--color-ink)]/10 hover:border-[var(--color-ink)]/30 bg-white'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 mt-0.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                        archiveModal.selectedCandidateId === c.id
+                          ? 'border-[var(--color-burnt-orange)] bg-[var(--color-burnt-orange)]'
+                          : 'border-gray-300'
+                      }`}>
+                        {archiveModal.selectedCandidateId === c.id && <CheckCircle size={12} className="text-white" />}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-[var(--color-ink)] text-sm">{c.name}</p>
+                        <p className="text-xs text-[var(--color-ink-light)] mt-0.5">{c.matchReason}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={doArchiveWithSelected}
+                  disabled={!archiveModal.selectedCandidateId || archiveModal.isSaving}
+                  className="w-full py-3.5 bg-[var(--color-burnt-orange)] text-white rounded-2xl font-bold hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Archive size={18}/>
+                  {archiveModal.isSaving ? 'Kaydediliyor...' : 'Seçili Müşteriyle Arşivle'}
+                </button>
+              </>
             ) : archiveModal.step === 'confirm' ? (
               <>
                 <div className="flex items-center gap-3">

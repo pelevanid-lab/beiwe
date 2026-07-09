@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, Mail, Phone, MapPin, Calendar as CalendarIcon, FileText, Briefcase, Edit2, Check, X, MessageCircle, Send } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, MapPin, Calendar as CalendarIcon, FileText, Briefcase, Edit2, Check, X, MessageCircle, Send, Instagram } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter, usePathname } from 'next/navigation';
 import { ingestMemory } from '@/lib/saule-core-client';
@@ -21,6 +21,7 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
   const [editType, setEditType] = useState('Lead');
   const [editPhone, setEditPhone] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editInstagram, setEditInstagram] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -43,6 +44,11 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
 
     const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
     return emailMatch ? emailMatch[0] : null;
+  };
+
+  const extractInstagram = (content: string) => {
+    const m = content.match(/- Instagram:\s*@?([^\s-]+)/i);
+    return m ? m[1].trim() : null;
   };
 
   // Note states
@@ -106,6 +112,7 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
 
           setEditPhone(extractPhone(targetNode.content) || '');
           setEditEmail(extractEmail(targetNode.content) || '');
+          setEditInstagram(extractInstagram(targetNode.content) || '');
 
           // Bu müşteriye ait randevuları bul
           if (customerName) {
@@ -256,6 +263,9 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
       if (editEmail.trim()) {
         const safeEmail = editEmail.trim().replace(/@/g, '[AT]').replace(/\./g, '[DOT]');
         newContent += ` - E-posta: ${safeEmail}`;
+      }
+      if (editInstagram.trim()) {
+        newContent += ` - Instagram: @${editInstagram.trim().replace(/^@/, '')}`;
       }
       if (editDetails.trim()) {
         newContent += ` - Ek Bilgi: ${editDetails.trim()}`;
@@ -763,7 +773,38 @@ export default function CustomerDetailClient({ dict, id }: { dict: any, id: stri
                   )
                 )}
 
-                <div className={extractPhone(customer.content) || extractEmail(customer.content) || isEditing ? "pt-4 border-t border-[var(--color-ink)]/5" : ""}>
+                {isEditing ? (
+                  <div className="mb-4">
+                    <label className="text-xs font-semibold text-[var(--color-ink-light)] uppercase tracking-wider block mb-1">Instagram</label>
+                    <div className="flex items-center gap-1 bg-[var(--color-ink)]/5 border-2 border-[var(--color-burnt-orange)] rounded-xl px-2">
+                      <span className="text-sm text-[var(--color-ink-light)]">@</span>
+                      <input 
+                        type="text"
+                        value={editInstagram.replace(/^@/, '')}
+                        onChange={e => setEditInstagram(e.target.value)}
+                        className="flex-1 bg-transparent p-2 outline-none text-sm text-[var(--color-ink)]"
+                        placeholder="kullanici_adi"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  extractInstagram(customer.content) && (
+                    <div>
+                      <label className="text-xs font-semibold text-[var(--color-ink-light)] uppercase tracking-wider block mb-1">Instagram</label>
+                      <a
+                        href={`https://instagram.com/${extractInstagram(customer.content)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium text-[var(--color-ink)] hover:text-pink-500 flex items-center gap-2 transition-colors"
+                      >
+                        <Instagram size={14} className="text-pink-400" />
+                        @{extractInstagram(customer.content)}
+                      </a>
+                    </div>
+                  )
+                )}
+
+                <div className={extractPhone(customer.content) || extractEmail(customer.content) || extractInstagram(customer.content) || isEditing ? "pt-4 border-t border-[var(--color-ink)]/5" : ""}>
                   <label className="text-xs font-semibold text-[var(--color-ink-light)] uppercase tracking-wider block mb-2">{dict.customers.notes_and_details}</label>
                   {isEditing ? (
                     <textarea 
