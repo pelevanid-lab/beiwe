@@ -131,7 +131,7 @@ export default function InboxClient({ dict }: { dict: any }) {
   }, [searchParams]);
 
   const selectedMessage = messages.find(m => m.id === selectedMessageId);
-  const filteredMessages = messages.filter(m => m.folder === activeFolder);
+  const filteredMessages = messages;
 
   const getPlatformIcon = (platform: string) => {
     const integration = INTEGRATIONS.find(i => i.id === platform);
@@ -265,25 +265,9 @@ export default function InboxClient({ dict }: { dict: any }) {
       {/* 2. Folders & Messages List (Horizontal Section) */}
       <div className="bg-white border-b border-[var(--color-ink)]/10 shrink-0 flex flex-col z-20 relative">
         <div className="flex flex-col md:flex-row md:items-center justify-between px-6 py-4 border-b border-[var(--color-ink)]/5 gap-4 shadow-sm">
-          {/* Folders */}
-          <div className="flex gap-2 overflow-x-auto no-scrollbar shrink-0">
-            {FOLDERS.map(folder => {
-              const Icon = folder.icon;
-              const isActive = activeFolder === folder.id;
-              return (
-                <button 
-                  key={folder.id}
-                  onClick={() => setActiveFolder(folder.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
-                    isActive 
-                      ? 'bg-[var(--color-ink)] text-white shadow-md' 
-                      : 'bg-[var(--color-paper)] text-[var(--color-ink-light)] hover:text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5 border border-[var(--color-ink)]/5'
-                  }`}
-                >
-                  <Icon size={16} /> {folder.name}
-                </button>
-              )
-            })}
+          {/* Removed Folders to create a unified inbox */}
+          <div className="flex gap-2 overflow-x-auto no-scrollbar shrink-0 items-center">
+             <div className="font-bold text-[var(--color-ink)] text-sm px-2">Tüm Mesajlar</div>
           </div>
           
           {/* Search */}

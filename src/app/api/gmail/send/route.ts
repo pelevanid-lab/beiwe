@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     // Ensure properly formatted headers
     const emailLines = [
       `To: ${to}`,
-      `Subject: ${subject || ''}`,
+      `Subject: ${subject ? `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=` : ''}`,
       'Content-Type: text/plain; charset="UTF-8"',
       'MIME-Version: 1.0',
       '',
