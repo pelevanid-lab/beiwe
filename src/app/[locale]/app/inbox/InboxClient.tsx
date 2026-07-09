@@ -19,6 +19,7 @@ type InboxMessage = {
   contact?: string; // email or phone number
   folder: 'inbox' | 'sent' | 'drafts' | 'spam' | 'archive';
   threadId?: string;
+  to?: string;
 };
 
 const INTEGRATIONS = [
