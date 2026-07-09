@@ -79,7 +79,8 @@ export default function InboxClient({ dict }: { dict: any }) {
         
         if (!groups.has(groupKey)) {
           // Store the normalized sender (email) so the chat header looks consistent
-          groups.set(groupKey, { ...msg, sender: rawSender });
+          // Set id to groupKey so selectedMessageId persists across snapshots
+          groups.set(groupKey, { ...msg, id: groupKey, sender: rawSender, threadId: msg.threadId || msg.id });
         } else {
           const existing = groups.get(groupKey)!;
           // Prepend older history to the newest message's history
