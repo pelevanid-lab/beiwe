@@ -21,6 +21,7 @@ type InboxMessage = {
   folder: 'inbox' | 'sent' | 'drafts' | 'spam' | 'archive';
   threadId?: string;
   to?: string;
+  docIds?: string[];
 };
 
 const INTEGRATIONS = [
