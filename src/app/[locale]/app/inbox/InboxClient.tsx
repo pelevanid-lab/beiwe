@@ -771,7 +771,7 @@ export default function InboxClient({ dict }: { dict: any }) {
                 </div>
 
                 <button
-                  onClick={doArchive}
+                  onClick={() => doArchive()}
                   disabled={archiveModal.isSaving}
                   className="w-full py-3.5 bg-[var(--color-burnt-orange)] text-white rounded-2xl font-bold hover:bg-orange-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
                 >
