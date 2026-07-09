@@ -239,7 +239,31 @@ KURALLAR:
           const prefix = modulePrefix[args.module];
           
           let nodes = composition?.nodes || [];
-          if (prefix) {
+          
+          if (args.module === 'customers') {
+            try {
+              const apiUrl = process.env.NEXT_PUBLIC_SAULE_API_URL || 'https://us-central1-saule-core.cloudfunctions.net/api';
+              const res = await fetch(`${apiUrl}/api/smi/nodes`);
+              if (res.ok) {
+                const data = await res.json();
+                const allNodes = data.nodes || [];
+                const userCustomers = allNodes.filter((n: any) => 
+                  n.spaceId === spaceId && 
+                  (n.content.includes('/customer ') || n.content.includes('/müşteri '))
+                );
+                
+                if (args.searchQuery) {
+                  const q = args.searchQuery.toLowerCase();
+                  nodes = userCustomers.filter((n: any) => n.content.toLowerCase().includes(q));
+                } else {
+                  nodes = userCustomers;
+                }
+              }
+            } catch (err) {
+              console.error("Direct customer fetch failed", err);
+              if (prefix) nodes = nodes.filter((n: any) => n.content?.toLowerCase().startsWith(prefix));
+            }
+          } else if (prefix) {
             nodes = nodes.filter((n: any) => n.content?.toLowerCase().startsWith(prefix));
           }
           
