@@ -33,7 +33,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true });
     }
 
-    let { access_token, lastHistoryId } = tokenDoc.data()!;
+    let { access_token, lastHistoryId, refresh_token } = tokenDoc.data()!;
+
+    // Test token and refresh if expired (401)
+    let isTokenValid = false;
+    let testRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/profile`, {
+      headers: { Authorization: `Bearer ${access_token}` }
+    });
+    
+    if (testRes.status === 401 && refresh_token) {
+      // Refresh token
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      
+      const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId!,
+          client_secret: clientSecret!,
+          refresh_token: refresh_token,
+          grant_type: 'refresh_token',
+        }),
+      });
+
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+        access_token = refreshData.access_token;
+        await adminDb.collection('google_tokens').doc(emailAddress).set({ 
+          access_token: access_token, 
+          updatedAt: new Date().toISOString() 
+        }, { merge: true });
+        await adminDb.collection('webhook_logs').add({ info: 'Token refreshed successfully in webhook', emailAddress });
+      } else {
+        await adminDb.collection('webhook_logs').add({ error: 'Token refresh failed in webhook', emailAddress });
+      }
+    }
 
     // Save the NEW historyId as the baseline for the NEXT webhook
     await adminDb.collection('google_tokens').doc(emailAddress).set({ lastHistoryId: historyId }, { merge: true });
