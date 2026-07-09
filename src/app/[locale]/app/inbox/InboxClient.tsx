@@ -23,6 +23,7 @@ type InboxMessage = {
   to?: string;
   docIds?: string[];
   docFolders?: string[];
+  unarchivedHistory?: ChatMessage[];
 };
 
 const INTEGRATIONS = [
@@ -97,7 +98,15 @@ export default function InboxClient({ dict }: { dict: any }) {
         if (!groups.has(groupKey)) {
           // Store the normalized sender (email) so the chat header looks consistent
           // Set id to groupKey so selectedMessageId persists across snapshots
-          groups.set(groupKey, { ...msg, id: groupKey, docIds: [doc.id], docFolders: [msg.folder], sender: rawSender, threadId: msg.threadId || msg.id });
+          groups.set(groupKey, { 
+            ...msg, 
+            id: groupKey, 
+            docIds: [doc.id], 
+            docFolders: [msg.folder], 
+            sender: rawSender, 
+            threadId: msg.threadId || msg.id,
+            unarchivedHistory: msg.folder !== 'archive' ? [...(msg.history || [])] : []
+          });
         } else {
           const existing = groups.get(groupKey)!;
           // Prepend older history to the newest message's history
@@ -106,6 +115,11 @@ export default function InboxClient({ dict }: { dict: any }) {
           existing.docIds.push(doc.id);
           existing.docFolders = existing.docFolders || [];
           existing.docFolders.push(msg.folder);
+          
+          if (msg.folder !== 'archive') {
+             existing.unarchivedHistory = existing.unarchivedHistory || [];
+             existing.unarchivedHistory = [...(msg.history || []), ...existing.unarchivedHistory];
+          }
         }
       });
 
@@ -407,7 +421,13 @@ export default function InboxClient({ dict }: { dict: any }) {
 
     const contactEmail = extractEmailStr(message.contact || message.sender);
     const contactName = message.sender.replace(/<.*>/, '').trim() || contactEmail;
-    const historyText = message.history.map(h => `[${h.sender === 'me' ? 'Ben' : contactName}] ${h.text}`).join('\n');
+    
+    // Only archive the unarchived history portion!
+    const historyToArchive = message.unarchivedHistory && message.unarchivedHistory.length > 0 
+      ? message.unarchivedHistory 
+      : message.history; // Fallback just in case
+
+    const historyText = historyToArchive.map(h => `[${h.sender === 'me' ? 'Ben' : contactName}] ${h.text}`).join('\n');
     const customer = overrideCustomer || matchedCustomer;
 
     try {
