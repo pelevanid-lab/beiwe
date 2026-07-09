@@ -55,7 +55,7 @@ export default function AppClient({ dict }: { dict: any }) {
   type AppTab = {
     id: string;
     title: string;
-    type: 'customer' | 'customers' | 'appointments' | 'notes' | 'docs';
+    type: 'customer' | 'customers' | 'appointments' | 'notes' | 'docs' | 'inbox';
     payload?: any;
   };
   const [tabs, setTabs] = useState<AppTab[]>([]);
