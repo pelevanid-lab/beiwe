@@ -155,7 +155,7 @@ export default function InboxClient({ dict }: { dict: any }) {
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
-            to: selectedMessage.sender,
+            to: selectedMessage.contact || selectedMessage.sender,
             subject: 'Re: ' + selectedMessage.preview.split('-')[0], // Basic subject extract
             text: replyText
           })
