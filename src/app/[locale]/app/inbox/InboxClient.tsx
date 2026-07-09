@@ -161,14 +161,23 @@ export default function InboxClient({ dict }: { dict: any }) {
     setIsSending(true);
     
     try {
+      // Extract custom subject if exists, e.g. "<Test Konu> Merhaba"
+      let customSubject = null;
+      let finalReplyText = replyText;
+      const subjectMatch = replyText.match(/^<([^>]+)>(.*)$/s);
+      if (subjectMatch) {
+        customSubject = subjectMatch[1].trim();
+        finalReplyText = subjectMatch[2].trim();
+      }
+
       // Optimiztic UI Update (Ekranda anında göstermek için)
       setMessages(prev => prev.map(msg => {
         if (msg.id === selectedMessage.id) {
           return {
             ...msg,
-            preview: replyText,
+            preview: finalReplyText,
             timestamp: 'Şimdi',
-            history: [...msg.history, { sender: 'me', text: replyText, time: 'Şimdi' }]
+            history: [...msg.history, { sender: 'me', text: (customSubject ? `<${customSubject}> ` : '') + finalReplyText, time: 'Şimdi' }]
           };
         }
         return msg;
@@ -177,6 +186,14 @@ export default function InboxClient({ dict }: { dict: any }) {
       // Gerçekten Gönder
       const token = localStorage.getItem('google_access_token');
       if (selectedMessage.platform === 'gmail' && token) {
+        
+        // Default subject if custom is not provided
+        let defaultSubject = 'Konusuz';
+        if (selectedMessage.preview) {
+          const splitPrev = selectedMessage.preview.split('-')[0].trim();
+          defaultSubject = splitPrev.startsWith('Re:') ? splitPrev : 'Re: ' + splitPrev;
+        }
+
         const res = await fetch('/api/gmail/send', {
           method: 'POST',
           headers: {
@@ -185,8 +202,8 @@ export default function InboxClient({ dict }: { dict: any }) {
           },
           body: JSON.stringify({
             to: selectedMessage.contact || selectedMessage.sender,
-            subject: selectedMessage.preview.split('-')[0].trim().startsWith('Re:') ? selectedMessage.preview.split('-')[0].trim() : 'Re: ' + selectedMessage.preview.split('-')[0].trim(),
-            text: replyText,
+            subject: customSubject || defaultSubject,
+            text: finalReplyText,
             threadId: selectedMessage.threadId || selectedMessage.id
           })
         });
@@ -401,7 +418,7 @@ export default function InboxClient({ dict }: { dict: any }) {
                   handleSend();
                 }
               }}
-              placeholder={selectedMessage ? `${getPlatformName(selectedMessage.platform)} üzerinden yazın... (E-postalar ve uzun metinler için geniş alan)` : 'Yanıtlamak için bir mesaj seçin...'}
+              placeholder={selectedMessage ? `<Konu> Mesajınız... şeklinde e-postanızın konusunu belirleyebilirsiniz (isteğe bağlı). ${getPlatformName(selectedMessage.platform)} üzerinden yazın...` : 'Yanıtlamak için bir mesaj seçin...'}
               className="w-full bg-transparent border-none focus:ring-0 resize-none min-h-[120px] max-h-[300px] text-base text-[var(--color-ink)] outline-none disabled:cursor-not-allowed leading-relaxed"
             />
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-ink)]/5">
