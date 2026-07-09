@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { Save, X, ArrowLeft, Loader2, Sparkles } from 'lucide-react';
+import { Save, X, ArrowLeft, Loader2, Bold, Italic, Strikethrough, Heading1, Heading2, List, ListOrdered, Undo, Redo } from 'lucide-react';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthProvider';
@@ -16,6 +16,91 @@ interface NativeDocEditorProps {
   onClose: () => void;
   onSaved: () => void;
 }
+
+const MenuBar = ({ editor }: { editor: any }) => {
+  if (!editor) return null;
+
+  const Button = ({ onClick, disabled, isActive, children }: any) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`p-2 rounded-lg hover:bg-gray-200 transition-colors ${isActive ? 'bg-gray-200 text-black font-bold' : 'text-gray-600'}`}
+    >
+      {children}
+    </button>
+  );
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 p-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl shrink-0">
+      <Button
+        onClick={() => editor.chain().focus().toggleBold().run()}
+        disabled={!editor.can().chain().focus().toggleBold().run()}
+        isActive={editor.isActive('bold')}
+      >
+        <Bold size={18} />
+      </Button>
+      <Button
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+        disabled={!editor.can().chain().focus().toggleItalic().run()}
+        isActive={editor.isActive('italic')}
+      >
+        <Italic size={18} />
+      </Button>
+      <Button
+        onClick={() => editor.chain().focus().toggleStrike().run()}
+        disabled={!editor.can().chain().focus().toggleStrike().run()}
+        isActive={editor.isActive('strike')}
+      >
+        <Strikethrough size={18} />
+      </Button>
+      
+      <div className="w-px h-6 bg-gray-300 mx-1" />
+
+      <Button
+        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+        isActive={editor.isActive('heading', { level: 1 })}
+      >
+        <Heading1 size={18} />
+      </Button>
+      <Button
+        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        isActive={editor.isActive('heading', { level: 2 })}
+      >
+        <Heading2 size={18} />
+      </Button>
+
+      <div className="w-px h-6 bg-gray-300 mx-1" />
+
+      <Button
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        isActive={editor.isActive('bulletList')}
+      >
+        <List size={18} />
+      </Button>
+      <Button
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        isActive={editor.isActive('orderedList')}
+      >
+        <ListOrdered size={18} />
+      </Button>
+
+      <div className="w-px h-6 bg-gray-300 mx-1" />
+
+      <Button
+        onClick={() => editor.chain().focus().undo().run()}
+        disabled={!editor.can().chain().focus().undo().run()}
+      >
+        <Undo size={18} />
+      </Button>
+      <Button
+        onClick={() => editor.chain().focus().redo().run()}
+        disabled={!editor.can().chain().focus().redo().run()}
+      >
+        <Redo size={18} />
+      </Button>
+    </div>
+  );
+};
 
 export default function NativeDocEditor({ initialDocId, initialTitle, initialContent, onClose, onSaved }: NativeDocEditorProps) {
   const { user } = useAuth();
@@ -107,8 +192,11 @@ export default function NativeDocEditor({ initialDocId, initialTitle, initialCon
 
       {/* Editor Area */}
       <div className="flex-1 overflow-y-auto bg-gray-50/50 p-8">
-        <div className="max-w-4xl mx-auto bg-white min-h-[800px] shadow-sm border border-gray-100 rounded-2xl p-12 lg:p-16">
-          <EditorContent editor={editor} />
+        <div className="max-w-4xl mx-auto bg-white min-h-[800px] shadow-sm border border-gray-100 rounded-2xl flex flex-col">
+          <MenuBar editor={editor} />
+          <div className="p-12 lg:p-16 flex-1 cursor-text" onClick={() => editor.commands.focus()}>
+            <EditorContent editor={editor} />
+          </div>
         </div>
       </div>
     </div>
