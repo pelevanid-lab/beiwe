@@ -540,6 +540,20 @@ export default function AppClient({ dict }: { dict: any }) {
                    });
                  }
                }
+             } else if (data.actionProposal.type === 'send_email') {
+               const email = data.actionProposal.payload?.to;
+               if (email) {
+                 const targetNode = combinedNodes.find((n: any) => n.content?.toLowerCase().startsWith('/customer') && n.content?.toLowerCase().includes(email.toLowerCase()));
+                 if (targetNode) {
+                   const match = targetNode.content.match(/\/(?:customer|müşteri)\s+([^-]+)/i);
+                   const customerName = match ? match[1].trim() : email;
+                   openTab({
+                     id: `customer-${targetNode.id}`,
+                     title: customerName,
+                     type: 'customer'
+                   });
+                 }
+               }
              }
              setResults(prev => prev ? { ...prev, actionProposal: data.actionProposal } : prev);
           }
@@ -760,7 +774,16 @@ export default function AppClient({ dict }: { dict: any }) {
                    }, 100);
                  }
                }
-            }
+             } else if (actionProposal.type === 'send_email') {
+               closeTab('inbox-module');
+               setTimeout(() => {
+                 openTab({
+                   id: `inbox-module`,
+                   title: `İletişim Merkezi`,
+                   type: 'inbox'
+                 });
+               }, 100);
+             }
           } else {
             setAiResponse(`❌ Üzgünüm, bir hata oluştu:\n- ${result.message}`);
           }
