@@ -598,6 +598,14 @@ export default function AppClient({ dict }: { dict: any }) {
             } else if (data.uiRoute === 'notes') {
               openTab({ id: 'notes-module', title: 'Notlar', type: 'notes' });
             }
+
+            // Eğer eylem teklifi yoksa ve sadece yönlendirme yapıldıysa arama ekranını kapat
+            if (!data.actionProposal) {
+              setTimeout(() => {
+                setIsSearching(false);
+                setQuery('');
+              }, 1500); // Kullanıcının yönlendiriliyor mesajını okuması için kısa bir gecikme
+            }
           }
 
           if (data.actionProposal?.isApproved) {
@@ -633,6 +641,7 @@ export default function AppClient({ dict }: { dict: any }) {
         })
         .catch(err => {
           console.error("Gemini API Error:", err);
+          setAiResponse("İşlem sırasında bir hata oluştu veya bağlantı zaman aşımına uğradı.");
           setIsGenerating(false);
         });
 
@@ -1089,7 +1098,7 @@ export default function AppClient({ dict }: { dict: any }) {
                                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                                   {aiResponse}
                                 </motion.div>
-                              ) : (
+                              ) : isGenerating ? (
                                 <div className="flex items-center gap-3 text-[var(--color-burnt-orange)] font-semibold py-2">
                                   <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
@@ -1097,6 +1106,8 @@ export default function AppClient({ dict }: { dict: any }) {
                                   </svg>
                                   <span>Düşünce bulutu oluşturuluyor...</span>
                                 </div>
+                              ) : (
+                                <div className="text-[var(--color-ink-light)] italic">İşlem tamamlandı.</div>
                               )}
                             </div>
                           </div>

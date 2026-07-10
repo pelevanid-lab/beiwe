@@ -214,6 +214,7 @@ KURALLAR:
         }]);
         response = result.response;
         finalAnswer = response.text();
+        if (!finalAnswer) finalAnswer = 'Yönlendiriliyor...';
         keepRunning = true;
         continue;
       }
