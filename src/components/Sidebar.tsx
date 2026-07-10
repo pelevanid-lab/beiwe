@@ -8,7 +8,7 @@ import UserSidebarWidget from '@/components/UserSidebarWidget';
 import React, { useState } from 'react';
 import { WorkspaceModal } from '@/components/WorkspaceModal';
 
-const SidebarItem = ({ icon: Icon, label, href, active, onClick }: { icon: any, label: string, href?: string, active: boolean, onClick?: () => void }) => {
+const SidebarItem = ({ icon: Icon, label, href, active, onClick, disabled, badge }: { icon: any, label: string, href?: string, active: boolean, onClick?: () => void, disabled?: boolean, badge?: string }) => {
   const [showTooltip, setShowTooltip] = useState(false);
 
   return (
@@ -17,13 +17,15 @@ const SidebarItem = ({ icon: Icon, label, href, active, onClick }: { icon: any, 
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
-      {href ? (
-        <Link href={href} className={`transition-colors p-2 rounded-xl ${active ? 'text-[var(--color-burnt-orange)] bg-[var(--color-burnt-orange)]/10' : 'text-[var(--color-ink-light)] hover:text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5'}`}>
+      {href && !disabled ? (
+        <Link href={href} className={`relative transition-colors p-2 rounded-xl ${active ? 'text-[var(--color-burnt-orange)] bg-[var(--color-burnt-orange)]/10' : 'text-[var(--color-ink-light)] hover:text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5'}`}>
           <Icon size={22} />
+          {badge && <span className="absolute -top-1 -right-1 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-burnt-orange)] opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-[var(--color-burnt-orange)]"></span></span>}
         </Link>
       ) : (
-        <button onClick={onClick} className={`transition-colors p-2 rounded-xl ${active ? 'text-[var(--color-burnt-orange)] bg-[var(--color-burnt-orange)]/10' : 'text-[var(--color-ink-light)] hover:text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5'}`}>
+        <button onClick={disabled ? undefined : onClick} disabled={disabled} className={`relative transition-colors p-2 rounded-xl ${disabled ? 'opacity-40 cursor-not-allowed' : ''} ${active ? 'text-[var(--color-burnt-orange)] bg-[var(--color-burnt-orange)]/10' : 'text-[var(--color-ink-light)] hover:text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5'}`}>
           <Icon size={22} />
+          {badge && <span className="absolute -top-2 -right-2 bg-[var(--color-burnt-orange)] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">{badge}</span>}
         </button>
       )}
       
@@ -41,6 +43,9 @@ export default function Sidebar({ dict }: { dict?: any }) {
   const pathname = usePathname();
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const locale = pathname.split('/')[1] || 'tr';
+  
+  // Use translations if dictionary has it, else default to 'Yakında'
+  const tComingSoon = dict?.common?.coming_soon || 'Yakında';
 
   // Aktif kontrolü: pathname eşleşmesine bakıyoruz
   const isActive = (path: string) => {
@@ -64,7 +69,7 @@ export default function Sidebar({ dict }: { dict?: any }) {
       
       <nav className="flex-1 flex flex-col items-center gap-6 w-full">
         {/* CRM Alanı */}
-        <SidebarItem icon={Inbox} label={dict?.nav_inbox || "Gelen Kutusu"} href={`/${locale}/app/inbox`} active={isActive('/inbox')} />
+        <SidebarItem icon={Inbox} label={dict?.nav_inbox || "Gelen Kutusu"} href={`/${locale}/app/inbox`} active={isActive('/inbox')} disabled={true} badge={tComingSoon} />
         <SidebarItem icon={FileText} label={dict?.nav_docs || "Dokümanlar"} href={`/${locale}/app/docs`} active={isActive('/docs')} />
         <SidebarItem icon={Users} label={dict?.nav_customers || "Müşteriler"} href={`/${locale}/app/customers`} active={isActive('/customers')} />
         <SidebarItem icon={Calendar} label={dict?.nav_appointments || "Randevular"} href={`/${locale}/app/appointments`} active={isActive('/appointments')} />

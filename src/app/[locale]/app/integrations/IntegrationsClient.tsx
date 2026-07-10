@@ -13,7 +13,7 @@ const availableIntegrations = [
     icon: MessageCircle,
     color: 'text-green-500',
     bgColor: 'bg-green-500/10',
-    status: 'disconnected',
+    status: 'coming_soon',
   },
   {
     id: 'instagram',
@@ -22,7 +22,7 @@ const availableIntegrations = [
     icon: Camera,
     color: 'text-pink-500',
     bgColor: 'bg-pink-500/10',
-    status: 'disconnected',
+    status: 'coming_soon',
   },
   {
     id: 'google',
@@ -31,7 +31,7 @@ const availableIntegrations = [
     icon: CalendarIcon,
     color: 'text-red-500',
     bgColor: 'bg-red-500/10',
-    status: 'disconnected', // 'connected', 'disconnected', 'coming_soon'
+    status: 'coming_soon',
   },
   {
     id: 'slack',
@@ -56,18 +56,11 @@ const availableIntegrations = [
 export default function IntegrationsClient({ dict }: { dict: any }) {
   const router = useRouter();
   const { user } = useAuth();
+  
+  const tComingSoon = dict?.common?.coming_soon || 'Yakında';
 
   const getIntegrations = () => {
-    return availableIntegrations.map(integration => {
-      if (integration.id === 'google') {
-        const isGoogleConnected = user?.providerData?.some(p => p.providerId === 'google.com');
-        return {
-          ...integration,
-          status: isGoogleConnected ? 'connected' : 'disconnected'
-        };
-      }
-      return integration;
-    });
+    return availableIntegrations;
   };
 
   const integrations = getIntegrations();
@@ -117,7 +110,7 @@ export default function IntegrationsClient({ dict }: { dict: any }) {
                     </span>
                   ) : isSoon ? (
                     <span className="flex items-center gap-1.5 text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
-                      Yakında
+                      {tComingSoon}
                     </span>
                   ) : null}
                 </div>
@@ -148,15 +141,11 @@ export default function IntegrationsClient({ dict }: { dict: any }) {
                     }`}
                   >
                     {isConnected ? (
-                      <>
-                        <Check size={18} /> Yönet
-                      </>
+                      <><Check size={18} /> {dict.integrations?.manage || 'Yönet'}</>
                     ) : isSoon ? (
-                      'Hazırlanıyor'
+                      <>{tComingSoon}</>
                     ) : (
-                      <>
-                        <Plus size={18} /> Bağlan
-                      </>
+                      <><Plus size={18} /> {dict.integrations?.connect || 'Bağlan'}</>
                     )}
                   </button>
                 </div>

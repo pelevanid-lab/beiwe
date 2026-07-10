@@ -28,6 +28,7 @@ export default function CustomersClient({ dict }: { dict: any }) {
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
   const [contactsError, setContactsError] = useState<string | null>(null);
 
+  const tComingSoon = dict?.common?.coming_soon || 'Yakında';
   const fetchCustomers = async () => {
     if (!user) return;
     try {
@@ -238,11 +239,12 @@ export default function CustomersClient({ dict }: { dict: any }) {
             </div>
             <div className="flex gap-2">
               <button 
-                onClick={handleOpenContactsModal}
-                className="flex items-center gap-2 bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-5 py-2.5 rounded-xl font-medium hover:border-[var(--color-burnt-orange)] hover:text-[var(--color-burnt-orange)] transition-colors shadow-sm"
+                disabled
+                className="relative flex items-center gap-2 bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-5 py-2.5 rounded-xl font-medium opacity-50 cursor-not-allowed shadow-sm"
               >
                 <CloudDownload size={18} />
                 <span className="hidden sm:inline">Google'dan Aktar</span>
+                <span className="absolute -top-2 -right-2 bg-[var(--color-burnt-orange)] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">{tComingSoon}</span>
               </button>
               <button 
                 onClick={() => setShowAddModal(true)}

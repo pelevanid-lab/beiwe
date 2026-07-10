@@ -68,6 +68,7 @@ export default function DocsClient({ dict }: { dict: any }) {
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const { user } = useAuth();
+  const tComingSoon = dict?.common?.coming_soon || 'Yakında';
 
   // Load Google Docs for the Modal
   const handleOpenImportModal = async () => {
@@ -227,10 +228,11 @@ export default function DocsClient({ dict }: { dict: any }) {
               <Search size={18} /> Ara
             </button>
             <button 
-              onClick={handleOpenImportModal}
-              className="bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
+              disabled
+              className="relative bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 opacity-50 cursor-not-allowed shadow-sm"
             >
               <CloudDownload size={18} /> Google'dan Aktar
+              <span className="absolute -top-2 -right-2 bg-[var(--color-burnt-orange)] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">{tComingSoon}</span>
             </button>
             <button onClick={() => setShowNewDocEditor(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20">
               <Plus size={18} /> Yeni Doküman
