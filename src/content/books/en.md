@@ -1,5 +1,5 @@
 # Beiwe Book
-### Multi-Layered Smart Workspace Constitution
+### Multi-Layered Smart Assistant Constitution
 
 *Version 2.0*
 
@@ -14,13 +14,13 @@ Bu doküman bir pazarlama materyali değildir. Bir tasarım rehberi de değildir
 
 **Amaç: Vizyon**
 
-> **Not:** Beiwe bir web tarayıcısı (browser) değildir. Tarayıcıların akışkan ve tanıdık arayüz dilini (sekme, komut çubuğu) kullanan, ancak amacı web'de gezinmek değil şirket verilerini yönetmek olan Çok Katmanlı bir Akıllı Çalışma Alanıdır (Workspace/OS).
+> **Not:** Beiwe bir web tarayıcısı (browser) değildir. Tarayıcıların akışkan ve tanıdık arayüz dilini (sekme, komut çubuğu) kullanan, ancak amacı web'de gezinmek değil şirket verilerini yönetmek olan Çok Katmanlı (Yapay Zeka + İnsan) bir Akıllı Asistandır (Assistant/OS). **Çok Katmanlı (Multi-Layered)** kavramı eskiden işin katmanlarını temsil ederken, artık **Yapay Zeka ve İnsan** (Human-in-the-Loop) katmanlarının kusursuz birlikteliğini temsil eder.
 
 ### The problem of today's business world: Software Fatigue (SaaS Fatigue)
 Son on yılda yazılımlar şirketleri daha verimli yapmak için tasarlandı. Ancak bugün geldiğimiz noktada şirketler verimli değil, bölünmüş durumda. Müşteri verisi CRM'de, toplantılar takvimde, görevler proje yönetim aracında, faturalar finans uygulamasında parçalanmış halde duruyor. Bir kullanıcı bir işi çözmek için üç farklı uygulamayı açıp aralarında zihinsel bir efor harcamak zorunda kalıyor. Günümüz yazılımları bilgiyi dijitalleştirdi, ama bağlamı (context) öldürdü.
 
 ### The limits of the Static Menu paradigm
-Geleneksel yazılımlar tek bir varsayım üzerine kuruludur: Kullanıcı ne yapacağını ve menüde nereye tıklayacağını bilir. Ancak gerçek hayattaki işler menülere sığmaz. "Ahmet Bey'in dünkü randevusu neden iptal oldu?", "Şu an öncelikli görevim ne?" gibi sorular, statik sayfalara tıklayarak değil, veriler arasında bağ kurarak cevaplanabilir. Menüler pasiftir; kullanıcının tıklamasını bekler. Oysa modern bir çalışma alanı kullanıcının niyetine proaktif olarak uyum sağlamalıdır.
+Geleneksel yazılımlar tek bir varsayım üzerine kuruludur: Kullanıcı ne yapacağını ve menüde nereye tıklayacağını bilir. Ancak gerçek hayattaki işler menülere sığmaz. "Ahmet Bey'in dünkü randevusu neden iptal oldu?", "Şu an öncelikli görevim ne?" gibi sorular, statik sayfalara tıklayarak değil, veriler arasında bağ kurarak cevaplanabilir. Menüler pasiftir; kullanıcının tıklamasını bekler. Oysa modern bir asistan kullanıcının niyetine proaktif olarak uyum sağlamalıdır.
 
 ### Why AI is not a solution alone
 Yapay zekâ asistanları bu sorunu kısmen çözdü: Artık menülerde gezinmek yerine sisteme soru sorabiliyoruz. Ama bu da yeni bir yanıltmaca yarattı. Sohbet ekranı, iş yapmak için tasarlanmış bir arayüz (UI) değildir; sadece metin üretir. Kullanıcı sadece metin görmek değil, aynı zamanda işlem yapmak (randevu oluşturmak, faturayı ödemek) ister. Beiwe'nin reddettiği tam olarak budur: Yapay zekâ, sadece konuşulan soyut bir varlık değil, arayüzü kontrol eden bir yönlendirici (router) olmalıdır.
@@ -28,8 +28,8 @@ Yapay zekâ asistanları bu sorunu kısmen çözdü: Artık menülerde gezinmek 
 ### Why context is getting lost
 Bugünün uygulamaları silolar halinde çalışır. Her sekme kendi başına bir adadır; birbirinden habersiz, birbirine bağlanmayan, oturum kapandığında yok olan geçici arayüz parçacıklarıdır. Kullanıcı dün girdiği müşteri notunu bugün takvime bağlayamaz, çünkü yazılımların ortak bir hafızası yoktur — sadece veritabanları vardır. Veritabanı ham bir kayıt defteridir, anlamlandırılmış bir bağlam değil.
 
-### Why workspace should be redesigned
-Yazılım, otuz yıldır aynı temel metaforla çalışır: Üst menü, sol menü, formlar ve butonlar. Bu metafor, kullanıcının sisteme uyması üzerine kuruludur. Ama modern ihtiyaç artık kullanıcının yazılıma uyum sağlaması değil, yazılımın kullanıcının niyetine (intent) uyum sağlamasıdır. Arayüzün temel birimi artık "menü" değil, "niyet" olmalıdır. Bu, kozmetik bir güncelleme değil; çalışma alanının (workspace) kendisinin ne olduğuna dair kök bir yeniden tanımdır.
+### Why assistant should be redesigned
+Yazılım, otuz yıldır aynı temel metaforla çalışır: Üst menü, sol menü, formlar ve butonlar. Bu metafor, kullanıcının sisteme uyması üzerine kuruludur. Ama modern ihtiyaç artık kullanıcının yazılıma uyum sağlaması değil, yazılımın kullanıcının niyetine (intent) uyum sağlamasıdır. Arayüzün temel birimi artık "menü" değil, "niyet" olmalıdır. Bu, kozmetik bir güncelleme değil; asistanlığın (assistant) kendisinin ne olduğuna dair kök bir yeniden tanımdır.
 
 ### Why Clarity Engine is our heart?
 Beiwe devasa, çok katmanlı bir araçtır (CRM, İK, Finans). Bu kadar derin bir yapıda kaybolmamak için statik menüler yetersizdir. Beiwe'nin tek bir hedefi vardır: **Netlik**. Kullanıcının girdiği cümleyi anlayan, bağlamı süzen ve o an tam olarak hangi modüle (hangi sekmeye) ihtiyaç varsa onu anında kullanıcının önüne seren **Clarity Engine**, Beiwe'nin kalbidir. Bir özellik, kullanıcının zihnindeki karmaşayı azaltıp netliği artırmıyorsa, o özellik Beiwe'de yer almamalıdır.
@@ -52,8 +52,8 @@ Bu bölüm teknik değildir. İlham vericidir. Burada yazılanlar bir özellik l
 > **Memory is the future of work.**
 > *Hafıza, çalışmanın geleceğidir.*
 
-> **The workspace should think with you, not wait for you.**
-> *Çalışma alanı (Workspace) tıklamanı beklememeli, seninle birlikte düşünmelidir.*
+> **The assistant should think with you, not wait for you.**
+> *Asistan (Assistant) tıklamanı beklememeli, seninle birlikte düşünmelidir.*
 
 > **A module is a place. Intent is a journey.**
 > *Bir modül (CRM/Takvim) statik bir yerdir. Kullanıcının niyeti ise bir yolculuktur.*
@@ -110,10 +110,10 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Chapter 4 — Workspace Principles
-*Workspace Principles*
+## Chapter 4 — Assistant Principles
+*Assistant Principles*
 
-**Amaç: Çalışma Alanı Davranışı**
+**Amaç: Asistan Davranışı**
 
 **İlke 1 — Her şey komut satırından / arama çubuğundan başlar.**
 **İlke 2 — Sekmelerden daha önemli olan bağlamdır.**
@@ -129,7 +129,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 **Amaç: Karar Mekanizması**
 
 **Features are not the product. Clarity is.** (Özellikler ürün değildir. Netlik üründür.)
-**AI is the engine, the workspace is the body.** (Yapay zekâ motordur, çalışma alanı (workspace) bedendir.)
+**AI is the engine, the assistant is the body.** (Yapay zekâ motordur, asistan (assistant) bedendir.)
 **Context outranks structure.** (Bağlam, katı hiyerarşik yapıdan daha üstündür.)
 **Memory belongs to the user.** (Hafıza kullanıcıya aittir. Veri yereldir ve şifrelidir.)
 **Transparency over optimization.** (Şeffaflık, optimizasyondan önce gelir.)
@@ -143,7 +143,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 - **Typography:** Başlıklar Playfair Display (Editoryal, düşünen), gövde metni Outfit (Okunabilir, net).
 - **Renkler:** Zemin kırık beyaz (#FAFAF8), Metin mürekkep tonu. Vurgu eylemleri için Turuncu-amber. Konsensüs/Uzlaşı sinyalleri için Yeşil.
-- **Düzen:** Çok katmanlı ama ferah. Merkezi hizalı komut çubuğu. Alt kısımda esnek sekme yönetimi (Workspace).
+- **Düzen:** Çok katmanlı ama ferah. Merkezi hizalı komut çubuğu. Alt kısımda esnek sekme yönetimi (Asistan).
 - **Bileşenler:** Clarity Engine'in komut çubuğu her zaman kutsaldır. Gölgeler minimaldir, derinlik hiyerarşiden gelir.
 
 ---
@@ -176,7 +176,7 @@ Hareket, dikkat çekmek için değil, geçişleri anlamlandırmak için vardır.
 
 **Amaç: SML + Beiwe İlişkisi**
 
-**Beiwe bedendir, Saule zihindir.** Beiwe (Çalışma Alanı / Arayüz) ile Saule (Hafıza / Veritabanı) arasında Decoupled (Gevşek Bağlı) ve net bir API ayrımı vardır.
+**Beiwe bedendir, Saule zihindir.** Beiwe (Asistan / Arayüz) ile Saule (Hafıza / Veritabanı) arasında Decoupled (Gevşek Bağlı) ve net bir API ayrımı vardır.
 İkisi arasındaki iletişim **SMI (Semantic Memory Interface)** adını verdiğimiz köprü üzerinden sağlanır.
 
 ### Teknik Bağ ve Veri Akışı
@@ -198,7 +198,7 @@ Sistem ilk kurulduğunda SML veritabanı boştur. Bu "soğuk başlangıç" anın
 **Amaç: Kod ve Sistem**
 
 ```
-Workspace (Çok Katmanlı OS)
+Assistant (Çok Katmanlı OS)
    ↓
 Frontend (Beiwe / Next.js)
    ↓

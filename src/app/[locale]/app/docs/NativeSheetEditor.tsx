@@ -1,110 +1,23 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Placeholder from '@tiptap/extension-placeholder';
-import { Save, X, ArrowLeft, Loader2, Bold, Italic, Strikethrough, Heading1, Heading2, List, ListOrdered, Undo, Redo } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Save, ArrowLeft, Loader2 } from 'lucide-react';
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthProvider';
-import { setClarityContext } from '@/lib/clarity-context';
 import { ingestMemory, deleteNode } from '@/lib/saule-core-client';
+import { Workbook } from '@fortune-sheet/react';
+import '@fortune-sheet/react/dist/index.css';
 
-interface NativeDocEditorProps {
+interface NativeSheetEditorProps {
   initialDoc?: any;
-  onClose: () => void;
-  onSaved: () => void;
+  onClose?: () => void;
+  onSaved?: (shouldClose?: boolean) => void;
 }
 
-const MenuBar = ({ editor }: { editor: any }) => {
-  if (!editor) return null;
-
-  const Button = ({ onClick, disabled, isActive, children }: any) => (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`p-2 rounded-lg hover:bg-gray-200 transition-colors ${isActive ? 'bg-gray-200 text-black font-bold' : 'text-gray-600'}`}
-    >
-      {children}
-    </button>
-  );
-
-  return (
-    <div className="flex flex-wrap items-center gap-1 p-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl shrink-0">
-      <Button
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        disabled={!editor.can().chain().focus().toggleBold().run()}
-        isActive={editor.isActive('bold')}
-      >
-        <Bold size={18} />
-      </Button>
-      <Button
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        disabled={!editor.can().chain().focus().toggleItalic().run()}
-        isActive={editor.isActive('italic')}
-      >
-        <Italic size={18} />
-      </Button>
-      <Button
-        onClick={() => editor.chain().focus().toggleStrike().run()}
-        disabled={!editor.can().chain().focus().toggleStrike().run()}
-        isActive={editor.isActive('strike')}
-      >
-        <Strikethrough size={18} />
-      </Button>
-      
-      <div className="w-px h-6 bg-gray-300 mx-1" />
-
-      <Button
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        isActive={editor.isActive('heading', { level: 1 })}
-      >
-        <Heading1 size={18} />
-      </Button>
-      <Button
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        isActive={editor.isActive('heading', { level: 2 })}
-      >
-        <Heading2 size={18} />
-      </Button>
-
-      <div className="w-px h-6 bg-gray-300 mx-1" />
-
-      <Button
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        isActive={editor.isActive('bulletList')}
-      >
-        <List size={18} />
-      </Button>
-      <Button
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        isActive={editor.isActive('orderedList')}
-      >
-        <ListOrdered size={18} />
-      </Button>
-
-      <div className="w-px h-6 bg-gray-300 mx-1" />
-
-      <Button
-        onClick={() => editor.chain().focus().undo().run()}
-        disabled={!editor.can().chain().focus().undo().run()}
-      >
-        <Undo size={18} />
-      </Button>
-      <Button
-        onClick={() => editor.chain().focus().redo().run()}
-        disabled={!editor.can().chain().focus().redo().run()}
-      >
-        <Redo size={18} />
-      </Button>
-    </div>
-  );
-};
-
-export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: NativeDocEditorProps & { dict?: any }) {
+export default function NativeSheetEditor({ initialDoc, onClose, onSaved, dict }: NativeSheetEditorProps & { dict?: any }) {
   const { user } = useAuth();
-  const [title, setTitle] = useState(initialDoc?.name || (dict?.app?.docs?.untitled_doc || 'İsimsiz Doküman'));
+  const [title, setTitle] = useState(initialDoc?.name || initialDoc?.title || (dict?.app?.docs?.untitled_sheet || 'İsimsiz Tablo'));
   const [isSaving, setIsSaving] = useState(false);
   const [docId, setDocId] = useState<string>(initialDoc?.id || crypto.randomUUID());
   
@@ -113,53 +26,17 @@ export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: 
   const [selectedRoomId, setSelectedRoomId] = useState<string>(initialDoc?.roomId || '');
   const [selectedShelfId, setSelectedShelfId] = useState<string>(initialDoc?.shelfId || '');
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Placeholder.configure({
-        placeholder: dict?.app?.docs?.doc_placeholder || 'Bir şeyler yazın veya yapay zekaya komut verin...',
-      }),
-    ],
-    content: initialDoc?.content || '',
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm sm:prose-base lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[500px] text-[var(--color-ink)] max-w-4xl',
-      },
-    },
-  });
-
-  // Clarity Context'e belgenin içeriğini bildir (AI'nin okuyabilmesi için)
-  useEffect(() => {
-    if (!editor) return;
-
-    let timeoutId: NodeJS.Timeout;
-
-    const updateContext = () => {
-      // Debounce to prevent too many React re-renders
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
-        setClarityContext({
-          module: 'docs',
-          title: title || (dict?.app?.docs?.untitled_doc || 'İsimsiz Doküman'),
-          activeRecord: {
-            id: docId,
-            type: 'document',
-            summary: `Doküman Başlığı: ${title}\nİçerik:\n${editor.getText().slice(0, 4000)}`
-          },
-          data: {}
-        });
-      }, 1000);
-    };
-
-    updateContext(); // initial setup
-    
-    editor.on('update', updateContext);
-    
-    return () => {
-      clearTimeout(timeoutId);
-      editor.off('update', updateContext);
-    };
-  }, [editor, title, docId]);
+  const workbookRef = useRef<any>(null);
+  
+  // Default data if no initial content
+  const defaultData = [{
+    name: "Sayfa1",
+    celldata: [],
+    status: 1
+  }];
+  
+  const [initialData] = useState<any[]>(initialDoc?.content && initialDoc?.content !== '' ? JSON.parse(initialDoc.content) : defaultData);
+  const [sheetData, setSheetData] = useState<any[]>(initialData);
 
   // Fetch Workspaces (Rooms) & Shelves
   useEffect(() => {
@@ -203,30 +80,82 @@ export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: 
     fetchRoomsAndShelves();
   }, [user]);
 
-  // AI tarafından yapılan güncellemeleri dinle
-  useEffect(() => {
-    const handleDocUpdated = (e: any) => {
-      if (e.detail && e.detail.id === docId && editor) {
-        if (e.detail.title) setTitle(e.detail.title);
-        if (e.detail.content && e.detail.content !== editor.getHTML()) {
-          editor.commands.setContent(e.detail.content);
-        }
-      }
-    };
-
-    window.addEventListener('docUpdated', handleDocUpdated as any);
-    return () => {
-      window.removeEventListener('docUpdated', handleDocUpdated as any);
-    };
-  }, [editor, docId]);
-
   const handleSave = async () => {
-    if (!user || !editor) return;
+    if (!user) return;
+    
+    // Force blur to commit any active cell edits in FortuneSheet
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    
+    // Give FortuneSheet a moment to process the blur and trigger onChange
+    await new Promise(resolve => setTimeout(resolve, 150));
     
     setIsSaving(true);
     try {
-      const htmlContent = editor.getHTML();
-      const plainText = editor.getText();
+      let currentData = sheetData;
+      
+      // 1. Get the most up-to-date internal state directly from the FortuneSheet instance
+      if (workbookRef.current && typeof workbookRef.current.getAllSheets === 'function') {
+        try {
+          const sheets = workbookRef.current.getAllSheets();
+          if (sheets && sheets.length > 0) {
+             currentData = sheets;
+          }
+        } catch (e) {
+          console.error("getAllSheets failed", e);
+        }
+      }
+
+      // CRITICAL: FortuneSheet edits the 2D 'data' matrix internally.
+      // But it ONLY initializes from the 1D 'celldata' array on load.
+      // We MUST sync 'data' back into 'celldata' before saving to Firebase!
+      try {
+        currentData = currentData.map((sheet: any) => {
+          if (sheet.data && Array.isArray(sheet.data)) {
+            // Write our own robust converter to guarantee no data loss
+            const newCelldata: any[] = [];
+            for (let r = 0; r < sheet.data.length; r++) {
+              if (!Array.isArray(sheet.data[r])) continue;
+              for (let c = 0; c < sheet.data[r].length; c++) {
+                const cell = sheet.data[r][c];
+                // Only save non-null cells that have actual properties (like v, m, ct, bg, etc)
+                if (cell !== null && cell !== undefined && Object.keys(cell).length > 0) {
+                  newCelldata.push({ r, c, v: cell });
+                }
+              }
+            }
+            return {
+              ...sheet,
+              celldata: newCelldata
+            };
+          }
+          return sheet;
+        });
+      } catch (e) {
+        console.error("Custom dataToCelldata mapping failed", e);
+      }
+      
+      // 3. Build a clean, circular-reference-free array to save.
+      // We explicitly pick only the safe properties that FortuneSheet uses for initialization.
+      // This guarantees `JSON.stringify` will never throw, and we don't need the destructive cache fallback.
+      const cleanDataToSave = currentData.map((sheet: any) => {
+        return {
+          name: sheet.name,
+          id: sheet.id,
+          order: sheet.order,
+          status: sheet.status,
+          celldata: sheet.celldata || [], // This now has the synced data from customDataToCelldata
+          config: sheet.config || {},
+          calcChain: sheet.calcChain || [],
+          images: sheet.images || [],
+          zoomRatio: sheet.zoomRatio || 1,
+          showGridLines: sheet.showGridLines
+        };
+      });
+      
+      const jsonContent = JSON.stringify(cleanDataToSave);
+      
       const roomName = workspaces.find(w => w.id === selectedRoomId)?.name || '';
       const shelf = shelves.find(s => s.id === selectedShelfId);
       const shelfName = selectedShelfId ? (shelf?.shelfName || shelf?.name || '') : '';
@@ -234,15 +163,14 @@ export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: 
       let newSmiNodeId = initialDoc?.smiNodeId || null;
       
       if (selectedRoomId) {
-        // Delete old SMI node if exists
         if (newSmiNodeId) {
           const token = await user.getIdToken();
           await deleteNode(newSmiNodeId, token).catch(console.error);
         }
         
-        let smiContent = `[Doküman] Başlık: ${title}. Zihin Odaları: ${roomName}.`;
+        let smiContent = `[Elektronik Tablo] Başlık: ${title}. Zihin Odaları: ${roomName}.`;
         if (shelfName) smiContent += ` Raf: ${shelfName}.`;
-        smiContent += `\nİçerik: ${plainText.substring(0, 3000)}`;
+        smiContent += `\nİçerik: (Tablo verisi mevcut)`;
         
         const token = await user.getIdToken();
         const ingestRes = await ingestMemory(
@@ -259,7 +187,6 @@ export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: 
           newSmiNodeId = ingestRes.id || ingestRes.nodeId;
         }
       } else if (newSmiNodeId) {
-        // Room deselected
         const token = await user.getIdToken();
         await deleteNode(newSmiNodeId, token).catch(console.error);
         newSmiNodeId = null;
@@ -268,10 +195,10 @@ export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: 
       const docRef = doc(db, 'beiwe_docs', docId);
       const payload: any = {
         title,
-        content: htmlContent,
+        content: jsonContent,
         ownerId: user.uid,
         updatedAt: serverTimestamp(),
-        type: 'document'
+        type: 'spreadsheet'
       };
       
       if (selectedRoomId) {
@@ -302,22 +229,16 @@ export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: 
 
       await setDoc(docRef, payload, { merge: true });
       
-      onSaved();
-    } catch (error) {
+      // Kaydedildiğini belirt, ama kapatma
+      alert(dict?.app?.docs?.btn_save ? dict.app.docs.btn_save + " Başarılı!" : "Kaydedildi!");
+      onSaved?.(false); // fetch docs without closing the modal
+    } catch (error: any) {
       console.error("Error saving document:", error);
-      alert(dict?.app?.docs?.error_saving_doc || "Doküman kaydedilirken bir hata oluştu.");
+      alert((dict?.app?.docs?.error_saving_sheet || "Tablo kaydedilirken bir hata oluştu.") + " Hata detayı: " + (error?.message || String(error)));
     } finally {
       setIsSaving(false);
     }
   };
-
-  if (!editor) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="animate-spin text-gray-400" size={32} />
-      </div>
-    );
-  }
 
   return (
     <div className="absolute inset-0 bg-white z-50 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -336,7 +257,7 @@ export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: 
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="text-lg font-bold text-[var(--color-ink)] bg-transparent border-none outline-none focus:ring-0 placeholder-gray-300 flex-1"
-            placeholder={dict?.app?.docs?.doc_name_placeholder || 'Doküman Adı'}
+            placeholder={dict?.app?.docs?.sheet_name_placeholder || 'Tablo Adı'}
           />
         </div>
 
@@ -365,7 +286,7 @@ export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: 
             >
               <option value="">{dict?.app?.docs?.shelf_hall_option || 'Raf (Hol)'}</option>
               {shelves.filter(s => s.roomId === selectedRoomId).map(s => (
-                <option key={s.id} value={s.id}>{s.shelfName}</option>
+                <option key={s.id} value={s.id}>{s.shelfName || s.name}</option>
               ))}
             </select>
           )}
@@ -373,7 +294,7 @@ export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: 
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl transition-colors shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-xl transition-colors shadow-sm"
           >
             {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             {dict?.app?.docs?.btn_save || 'Kaydet'}
@@ -382,13 +303,12 @@ export default function NativeDocEditor({ initialDoc, onClose, onSaved, dict }: 
       </div>
 
       {/* Editor Area */}
-      <div className="flex-1 overflow-y-auto bg-gray-50/50 p-8">
-        <div className="max-w-4xl mx-auto bg-white min-h-[800px] shadow-sm border border-gray-100 rounded-2xl flex flex-col">
-          <MenuBar editor={editor} />
-          <div className="p-12 lg:p-16 flex-1 cursor-text" onClick={() => editor.commands.focus()}>
-            <EditorContent editor={editor} />
-          </div>
-        </div>
+      <div className="flex-1 w-full h-full relative z-0">
+        <Workbook 
+          ref={workbookRef} 
+          data={initialData} 
+          onChange={(data) => setSheetData(data)}
+        />
       </div>
     </div>
   );

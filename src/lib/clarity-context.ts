@@ -8,7 +8,7 @@
  */
 
 type ClarityModuleContext = {
-  module: 'customers' | 'appointments' | 'notes' | 'docs' | 'inbox' | 'integrations';
+  module: 'customers' | 'appointments' | 'notes' | 'docs' | 'inbox' | 'integrations' | 'tasks' | 'workspaces';
   title?: string;
   /** Ekrandaki önemli veri (müşteri listesi, randevu detayı, vb.) */
   data: Record<string, any>;

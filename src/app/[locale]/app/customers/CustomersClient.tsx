@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { Users, Search, Plus, UserPlus, Clock, ChevronRight, FileText, Phone, Mail, CloudDownload, AlertCircle } from 'lucide-react';
+import { Users, Search, Plus, UserPlus, Clock, ChevronRight, FileText, Phone, Mail, CloudDownload, AlertCircle, Edit2, Trash2 } from 'lucide-react';
 import { ingestMemory } from '@/lib/saule-core-client';
 import { fetchWithGoogleAuth } from '@/lib/google-api';
 import { useRouter } from 'next/navigation';
 import { setClarityContext } from '@/lib/clarity-context';
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 
 export default function CustomersClient({ dict }: { dict: any }) {
   const { user } = useAuth();
@@ -17,9 +19,12 @@ export default function CustomersClient({ dict }: { dict: any }) {
   
   // Modal state
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerDetails, setNewCustomerDetails] = useState('');
   const [newCustomerType, setNewCustomerType] = useState('Lead');
+  const [workspaces, setWorkspaces] = useState<any[]>([]);
+  const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
 
   // Google Contacts Modal state
   const [showContactsModal, setShowContactsModal] = useState(false);
@@ -39,6 +44,15 @@ export default function CustomersClient({ dict }: { dict: any }) {
       
       const data = await res.json();
       const allNodes = data.nodes || [];
+      
+      const userWorkspaces = allNodes.filter((n: any) => 
+        n.spaceId === user.uid && 
+        n.content.includes('Kullanıcı İşletme Bilgisi:')
+      );
+      setWorkspaces(userWorkspaces.map((w: any) => {
+         const nameMatch = w.content.match(/Oda İsmi:\s*(.*?)\./) || w.content.match(/İşletme Adı:\s*(.*?)\./);
+         return { id: w.id, name: nameMatch ? nameMatch[1].trim() : 'İsimsiz' };
+      }));
       
       // Müşteri düğümlerini filtrele (tarihe göre en yeni en üstte)
       const userCustomers = allNodes.filter((n: any) => 
@@ -96,7 +110,8 @@ export default function CustomersClient({ dict }: { dict: any }) {
     } catch (err: any) {
       console.error(err);
       if (err.message?.includes('No Google access token') || err.message?.includes('Failed to refresh') || err.message?.includes('insufficient authentication scopes')) {
-        setContactsError('Google hesabınızın kişi okuma izni eksik. Lütfen Entegrasyonlar sayfasından Google bağlantınızı kesip tekrar bağlayın (Kişiler izni gereklidir).');
+        // Redirect directly instead of showing error
+        window.location.href = `/api/auth/google/connect?returnTo=${encodeURIComponent(window.location.pathname + '?action=import_google_contacts')}`;
       } else {
         setContactsError('Kişiler yüklenirken bir hata oluştu: ' + err.message);
       }
@@ -148,6 +163,9 @@ export default function CustomersClient({ dict }: { dict: any }) {
         } else {
           finalContent += ` - Ek Bilgi: (Google Contacts'ten aktarıldı)`;
         }
+        if (selectedRooms.length > 0) {
+          finalContent += ` - Zihin Odaları: ${selectedRooms.join(', ')}`;
+        }
 
         await ingestMemory(
           finalContent,
@@ -180,8 +198,25 @@ export default function CustomersClient({ dict }: { dict: any }) {
       if (newCustomerDetails.trim()) {
         finalContent += ` - Ek Bilgi: ${newCustomerDetails.trim()}`;
       }
+      if (selectedRooms.length > 0) {
+        const roomNames = workspaces.filter(w => selectedRooms.includes(w.id)).map(w => w.name);
+        finalContent += ` - Zihin Odaları: ${roomNames.join(', ')}`;
+      }
 
       const token = await user.getIdToken();
+      
+      if (editingCustomerId) {
+        const q = query(collection(db, 'smi_nodes'), where('id', '==', editingCustomerId));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          await deleteDoc(doc(db, 'smi_nodes', snap.docs[0].id));
+        } else {
+          const q2 = query(collection(db, 'nodes'), where('id', '==', editingCustomerId));
+          const snap2 = await getDocs(q2);
+          if (!snap2.empty) await deleteDoc(doc(db, 'nodes', snap2.docs[0].id));
+        }
+      }
+
       await ingestMemory(
         finalContent,
         'action',
@@ -193,9 +228,11 @@ export default function CustomersClient({ dict }: { dict: any }) {
       );
       
       setShowAddModal(false);
+      setEditingCustomerId(null);
       setNewCustomerName('');
       setNewCustomerDetails('');
       setNewCustomerType('Lead');
+      setSelectedRooms([]);
       // Reload
       await fetchCustomers();
     } catch (err) {
@@ -226,6 +263,70 @@ export default function CustomersClient({ dict }: { dict: any }) {
     return '-';
   };
 
+  const extractCustomerRooms = (content: string) => {
+    if (content.includes('- Zihin Odaları:')) {
+      const match = content.match(/- Zihin Odaları:\s*([^-]+)/i);
+      if (match) {
+        const names = match[1].trim().split(',').map(s => s.trim());
+        // Map names back to IDs if they exist
+        const ids = names.map(n => workspaces.find(w => w.name === n)?.id).filter(Boolean);
+        return ids as string[];
+      }
+    }
+    return [];
+  };
+  
+  const extractCustomerRoomNames = (content: string) => {
+    if (content.includes('- Zihin Odaları:')) {
+      const match = content.match(/- Zihin Odaları:\s*([^-]+)/i);
+      return match ? match[1].trim().split(',').map(s => s.trim()) : [];
+    }
+    return [];
+  };
+
+  const handleOpenAddModal = () => {
+    setEditingCustomerId(null);
+    setNewCustomerName('');
+    setNewCustomerDetails('');
+    setNewCustomerType('Lead');
+    setSelectedRooms([]);
+    setShowAddModal(true);
+  };
+
+  const handleEdit = (e: React.MouseEvent, c: any) => {
+    e.stopPropagation();
+    setNewCustomerName(extractCustomerName(c.content));
+    setNewCustomerType(extractCustomerType(c.content));
+    setNewCustomerDetails(extractCustomerDetails(c.content));
+    setSelectedRooms(extractCustomerRooms(c.content));
+    setEditingCustomerId(c.id);
+    setShowAddModal(true);
+  };
+
+  const handleDelete = async (e: React.MouseEvent, c: any) => {
+    e.stopPropagation();
+    if (!window.confirm("Bu kişiyi silmek istediğinize emin misiniz?")) return;
+    if (!user) return;
+    
+    try {
+      const q = query(collection(db, 'smi_nodes'), where('id', '==', c.id));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await deleteDoc(doc(db, 'smi_nodes', snap.docs[0].id));
+      } else {
+        const q2 = query(collection(db, 'nodes'), where('id', '==', c.id));
+        const snap2 = await getDocs(q2);
+        if (!snap2.empty) {
+          await deleteDoc(doc(db, 'nodes', snap2.docs[0].id));
+        }
+      }
+      setCustomers(customers.filter(cust => cust.id !== c.id));
+    } catch (err) {
+      console.error("Delete failed", err);
+      await fetchCustomers();
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-paper)] p-8 overflow-y-auto w-full relative">
       <div className="max-w-5xl mx-auto w-full space-y-8">
@@ -240,12 +341,11 @@ export default function CustomersClient({ dict }: { dict: any }) {
             </div>
             <div className="flex gap-2">
               <button 
-                disabled
-                className="relative flex items-center gap-2 bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-5 py-2.5 rounded-xl font-medium opacity-50 cursor-not-allowed shadow-sm"
+                onClick={handleOpenContactsModal}
+                className="flex items-center gap-2 bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-5 py-2.5 rounded-xl font-medium hover:bg-[var(--color-ink)]/5 transition-colors shadow-sm"
               >
                 <CloudDownload size={18} />
                 <span className="hidden sm:inline">Google'dan Aktar</span>
-                <span className="absolute -top-2 -right-2 bg-[var(--color-burnt-orange)] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">{tComingSoon}</span>
               </button>
               <button 
                 onClick={() => setShowAddModal(true)}
@@ -322,9 +422,18 @@ export default function CustomersClient({ dict }: { dict: any }) {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${type === 'Lead' ? 'bg-blue-100 text-blue-800' : type === 'Consumer' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {type}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit ${type === 'Lead' ? 'bg-blue-100 text-blue-800' : type === 'Consumer' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                              {type}
+                            </span>
+                            {extractCustomerRoomNames(c.content).length > 0 && (
+                               <div className="flex gap-1 flex-wrap mt-1">
+                                 {extractCustomerRoomNames(c.content).map((rn: string, idx: number) => (
+                                    <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--color-burnt-orange)] text-white">{rn}</span>
+                                 ))}
+                               </div>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-[var(--color-ink-light)] max-w-xs truncate">
@@ -338,9 +447,17 @@ export default function CustomersClient({ dict }: { dict: any }) {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <button className="text-[var(--color-burnt-orange)] opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-[var(--color-burnt-orange)]/10 rounded-lg inline-flex items-center gap-1 font-medium text-sm">
-                            {dict.customers.detail_btn} <ChevronRight size={16} />
-                          </button>
+                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={(e) => handleEdit(e, c)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Düzenle">
+                              <Edit2 size={18} />
+                            </button>
+                            <button onClick={(e) => handleDelete(e, c)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Sil">
+                              <Trash2 size={18} />
+                            </button>
+                            <button className="text-[var(--color-burnt-orange)] p-2 hover:bg-[var(--color-burnt-orange)]/10 rounded-lg inline-flex items-center gap-1 font-medium text-sm ml-2">
+                              {dict.customers.detail_btn} <ChevronRight size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -355,8 +472,10 @@ export default function CustomersClient({ dict }: { dict: any }) {
       {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-[var(--color-ink)]/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[var(--color-paper)] rounded-3xl p-8 w-full max-w-md shadow-2xl animate-in zoom-in-95 fade-in duration-200">
-            <h2 className="text-2xl font-bold text-[var(--color-ink)] mb-6">{dict.customers.new_customer_title}</h2>
+          <div className="bg-[var(--color-paper)] rounded-3xl p-8 w-full max-w-md shadow-2xl animate-in zoom-in-95 fade-in duration-200 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-[var(--color-ink)] mb-6">
+              {editingCustomerId ? "Kişiyi Düzenle" : dict.customers.new_customer_title}
+            </h2>
             <form onSubmit={handleAddCustomer} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-1">{dict.customers.name_label}</label>
@@ -405,6 +524,27 @@ export default function CustomersClient({ dict }: { dict: any }) {
                   placeholder={dict.customers.details_placeholder}
                 />
               </div>
+              {workspaces.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-ink-light)] mb-2">Zihin Odaları (Opsiyonel)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {workspaces.map(w => (
+                      <label key={w.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${selectedRooms.includes(w.id) ? 'border-[var(--color-burnt-orange)] bg-[var(--color-burnt-orange)]/10 text-[var(--color-burnt-orange)]' : 'border-[var(--color-ink)]/20 text-[var(--color-ink)] hover:bg-[var(--color-ink)]/5'}`}>
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={selectedRooms.includes(w.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedRooms([...selectedRooms, w.id]);
+                            else setSelectedRooms(selectedRooms.filter(id => id !== w.id));
+                          }}
+                        />
+                        <span className="text-sm font-medium">{w.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-end gap-3 mt-8">
                 <button
                   type="button"

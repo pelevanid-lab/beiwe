@@ -1,7 +1,7 @@
 # Beiwe Blueprint: The Clarity Engine Architecture
 
 ## Vizyon
-Beiwe, sıradan bir CRM (Müşteri İlişkileri Yönetimi) aracı olmanın ötesinde, **çok katmanlı (multi-layered)** ve **bağlam farkındalığı yüksek (context-aware)** bir asistan platformudur. Şirketlerin müşteri yönetimi (CRM), randevu ve takvim organizasyonu, doküman yönetimi ve görev takibi gibi operasyonlarını tek bir merkezden yürütmesini sağlar.
+Beiwe, sıradan bir CRM (Müşteri İlişkileri Yönetimi) aracı olmanın ötesinde, **çok katmanlı (multi-layered)** ve **bağlam farkındalığı yüksek (context-aware)** bir kişisel asistan platformudur. Yoğun ve kaotik zihinlere sahip bireyler (DEB/ADHD yaşayan profesyoneller, serbest çalışanlar, öğrenciler) ile küçük işletmelere hitap eder. Kullanıcının günlük hayatını, görevlerini, takvimini ve iletişimini — aynı zamanda şirket operasyonlarını (CRM, randevu ve takvim organizasyonu, doküman yönetimi, görev takibi) — tek bir merkezden yönetmesini sağlar.
 
 ## Çok Katmanlı Yapı ve Karşılaşılan Zorluklar
 Beiwe gibi çok katmanlı araçlarda en büyük risk, kullanıcının farklı modüller, menüler ve ekranlar arasında kaybolmasıdır. Geleneksel sistemler statik menüler ve karmaşık yönlendirmelerle çalışırken, Beiwe bu sorunu **Clarity Engine (Netlik Motoru)** adını verdiğimiz dinamik bir yapay zeka yönlendirme katmanıyla çözer.

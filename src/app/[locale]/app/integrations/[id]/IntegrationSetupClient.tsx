@@ -92,11 +92,17 @@ export default function IntegrationSetupClient({ dict, integrationId }: { dict: 
       }
 
       setIsSuccess(true);
-      setTimeout(() => setIsSuccess(false), 3000);
       
-      // Clean URL
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, newUrl);
+      const returnTo = params.get('returnTo');
+      if (returnTo) {
+        window.location.href = returnTo;
+      } else {
+        setTimeout(() => setIsSuccess(false), 3000);
+        
+        // Clean URL
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+      }
     }
   }, []);
 

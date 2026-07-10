@@ -13,7 +13,7 @@ if (!apiKey) {
 }
 
 const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 const sourcePath = path.join(__dirname, 'src', 'content', 'books', 'tr.md');
 const sourceContent = fs.readFileSync(sourcePath, 'utf8');

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, MessageCircle, Mail, Camera, Send, Filter, MoreVertical, Archive, Trash2, Reply, Send as SendIcon, Inbox, SendHorizontal, FileText, AlertCircle, Phone, Globe, UserPlus, CheckCircle, X } from 'lucide-react';
+import { Search, Mail, Archive, Trash2, Reply, Send as SendIcon, FileText, AlertCircle, CheckCircle, X, UserPlus, MessageCircle, Camera, Globe, Inbox, MoreVertical } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
@@ -40,7 +40,6 @@ const FOLDERS = [
   { id: 'spam', name: 'Spam', icon: AlertCircle },
   { id: 'archive', name: 'Arşiv', icon: Archive },
 ];
-
 export default function InboxClient({ dict }: { dict: any }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -218,7 +217,7 @@ export default function InboxClient({ dict }: { dict: any }) {
       // Extract custom subject if exists, e.g. "<Test Konu> Merhaba"
       let customSubject = null;
       let finalReplyText = replyText;
-      const subjectMatch = replyText.match(/^<([^>]+)>([\s\S]*)$/);
+      const subjectMatch = replyText.match(new RegExp('^<([^>]+)>([\\\\s\\\\S]*)$'));
       if (subjectMatch) {
         customSubject = subjectMatch[1].trim();
         finalReplyText = subjectMatch[2].trim();
@@ -321,13 +320,13 @@ export default function InboxClient({ dict }: { dict: any }) {
   };
 
   const extractEmailStr = (str: string) => {
-    const m = str.match(/<(.+)>/);
+    const m = str.match(new RegExp('<(.+)>'));
     return m ? m[1].toLowerCase() : str.toLowerCase();
   };
 
   const handleArchive = async (msg: InboxMessage) => {
     const contactEmail = extractEmailStr(msg.contact || msg.sender);
-    const contactName = msg.sender.replace(/<.*>/, '').trim() || contactEmail;
+    const contactName = msg.sender.replace(new RegExp('<.*>'), '').trim() || contactEmail;
 
     // Multi-criteria customer search in Saule
     const candidates: { id: string; name: string; matchReason: string }[] = [];
@@ -499,43 +498,62 @@ export default function InboxClient({ dict }: { dict: any }) {
     }
   };
 
+  const isGmailConnected = !!(typeof window !== 'undefined' && localStorage.getItem('google_access_token'));
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-paper)] overflow-hidden w-full relative">
       
-      {/* 1. Header & Integrations Bar (Top Section) */}
-      <div className="bg-white border-b border-[var(--color-ink)]/10 flex flex-col px-6 py-4 shrink-0 z-30 relative shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-[var(--color-burnt-orange)]/10 rounded-xl text-[var(--color-burnt-orange)]">
-              <SendIcon size={24} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-[var(--color-ink)] tracking-tight leading-none">İletişim Merkezi</h1>
-              <p className="text-[var(--color-ink-light)] text-sm mt-1">Tüm mesajlarınız ve e-postalarınız tek bir yerde</p>
-            </div>
+      {/* Gmail Connect Screen — shown when not connected */}
+      {!isGmailConnected && (
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8">
+          <div className="w-20 h-20 rounded-full bg-red-50 flex items-center justify-center">
+            <Mail size={36} className="text-red-500" />
+          </div>
+          <div className="text-center space-y-2 max-w-sm">
+            <h2 className="text-2xl font-bold text-[var(--color-ink)] font-serif">
+              {dict?.inbox_connect_gmail || 'Gmail ile Bağlan'}
+            </h2>
+            <p className="text-[var(--color-ink-light)] text-base leading-relaxed">
+              {dict?.inbox_connect_desc || 'E-postalarınızı Beiwe\'de yönetmek için Gmail hesabınızı bağlayın.'}
+            </p>
+          </div>
+          <a
+            href="/api/auth/google/connect"
+            className="flex items-center gap-3 bg-[var(--color-burnt-orange)] text-white px-8 py-4 rounded-full font-bold text-base hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20"
+          >
+            <Mail size={20} />
+            {dict?.inbox_connect_btn || 'Gmail Hesabını Bağla'}
+          </a>
+          <p className="text-xs text-[var(--color-ink-light)] opacity-60">
+            Verileriniz size aittir. Sıfır takip.
+          </p>
+        </div>
+      )}
+
+      {/* Main Inbox UI — shown when Gmail is connected */}
+      {isGmailConnected && (
+        <div className="flex-1 flex flex-col h-full w-full">
+      {/* Header */}
+      <div className="bg-white border-b border-[var(--color-ink)]/10 flex items-center justify-between px-6 py-4 shrink-0 z-30 relative shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-red-50 rounded-xl text-red-500">
+            <Mail size={22} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-[var(--color-ink)] tracking-tight leading-none">
+              {user?.email || 'E-posta'}
+            </h1>
+            <p className="text-[var(--color-ink-light)] text-xs mt-0.5">Gmail</p>
           </div>
         </div>
-        
-        {/* Integrations List */}
-        <div className="flex items-center gap-3 overflow-x-auto pb-1 no-scrollbar">
-          {INTEGRATIONS.map(integration => {
-            const Icon = integration.icon;
-            return (
-              <div 
-                key={integration.id} 
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all shrink-0 ${
-                  integration.active 
-                    ? `bg-white ${integration.border} ${integration.color} shadow-sm` 
-                    : 'bg-gray-50 border-gray-200 text-gray-400 opacity-60 grayscale'
-                }`}
-                title={!integration.active && !integration.comingSoon ? 'Bağlantı Kurulmadı' : integration.comingSoon ? 'Yakında eklenecek' : ''}
-              >
-                <Icon size={16} />
-                <span>{integration.name}</span>
-                {integration.comingSoon && <span className="text-[10px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded ml-1">Yakında</span>}
-              </div>
-            );
-          })}
+        {/* Search */}
+        <div className="relative w-64 hidden md:block">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-ink-light)]" />
+          <input
+            type="text"
+            placeholder="Mesajlarda ara..."
+            className="w-full bg-[var(--color-paper)] border border-[var(--color-ink)]/10 rounded-full py-2 pl-9 pr-4 text-sm focus:outline-none focus:border-[var(--color-burnt-orange)] transition-colors"
+          />
         </div>
       </div>
 
@@ -712,7 +730,7 @@ export default function InboxClient({ dict }: { dict: any }) {
                 disabled={!replyText.trim() || !selectedMessage || isSending}
                 className="px-8 py-3 bg-[var(--color-burnt-orange)] text-white rounded-xl font-bold hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:hover:bg-[var(--color-burnt-orange)] flex items-center gap-2 shadow-sm"
               >
-                {isSending ? 'Gönderiliyor...' : 'Gönder'} <Send size={18} />
+                {isSending ? 'Gönderiliyor...' : 'Gönder'} <SendIcon size={18} />
               </button>
             </div>
           </div>
@@ -739,7 +757,7 @@ export default function InboxClient({ dict }: { dict: any }) {
                 <p className="text-sm text-[var(--color-ink-light)] text-center">Saule belleğine kaydedildi ve müşteri geçmişine eklendi.</p>
               </div>
             ) : archiveModal.step === 'select_customer' ? (
-              <>
+              <div>
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center">
                     <UserPlus size={22} className="text-blue-600" />
@@ -782,9 +800,9 @@ export default function InboxClient({ dict }: { dict: any }) {
                   <Archive size={18}/>
                   {archiveModal.isSaving ? 'Kaydediliyor...' : 'Seçili Müşteriyle Arşivle'}
                 </button>
-              </>
+              </div>
             ) : archiveModal.step === 'confirm' ? (
-              <>
+              <div>
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center">
                     <Archive size={22} className="text-amber-600" />
@@ -818,10 +836,10 @@ export default function InboxClient({ dict }: { dict: any }) {
                   <Archive size={18}/>
                   {archiveModal.isSaving ? 'Kaydediliyor...' : 'Arşivle ve Kaydet'}
                 </button>
-              </>
+              </div>
             ) : (
               /* no_customer step */
-              <>
+              <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center">
                     <Archive size={22} className="text-amber-600" />
@@ -837,7 +855,7 @@ export default function InboxClient({ dict }: { dict: any }) {
                   <div>
                     <p className="text-sm font-semibold text-orange-800">Kayıtlı Müşteri Bulunamadı</p>
                     <p className="text-sm text-orange-700">
-                      <span className="font-bold">{archiveModal.message?.sender.replace(/<.*>/, '').trim()}</span> henüz müşteri listesinde yok
+                      <span className="font-bold">{archiveModal.message?.sender.replace(new RegExp('<.*>'), '').trim()}</span> henüz müşteri listesinde yok
                     </p>
                   </div>
                 </div>
@@ -855,10 +873,12 @@ export default function InboxClient({ dict }: { dict: any }) {
                     Arşivlemek için önce bu kişiyi müşteri olarak kaydetmelisiniz. İptal etmek için sağ üstteki X butonuna tıklayın.
                   </p>
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>
+      )}
+      </div>
       )}
 
     </div>

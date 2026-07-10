@@ -10,6 +10,7 @@ import { ImportContactsAction } from './actions/import_contacts';
 import { SendEmailAction } from './actions/send_email';
 import { CreateDocAction } from './actions/create_doc';
 import { UpdateDocAction } from './actions/update_doc';
+import { CreateTaskAction } from './actions/create_task';
 
 // This is the single source of truth for all Agent capabilities.
 // To add a new module/capability, create a new Action file and add it here.
@@ -24,5 +25,6 @@ export const CLARITY_ACTIONS: Record<string, ClarityAction> = {
   import_google_contacts: ImportContactsAction,
   send_email: SendEmailAction,
   create_doc: CreateDocAction,
-  update_doc: UpdateDocAction
+  update_doc: UpdateDocAction,
+  create_task: CreateTaskAction,
 };

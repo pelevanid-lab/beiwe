@@ -1,9 +1,8 @@
 import { getDictionary } from '@/lib/dictionaries';
 
 import Link from 'next/link';
-import { Download, Globe, Shield, EyeOff, Sparkles, RefreshCcw } from 'lucide-react';
+import { Shield, EyeOff, Sparkles, Brain } from 'lucide-react';
 import { LogoIcon } from '@/components/Logo';
-import { HeroSearch } from '@/components/HeroSearch';
 
 export default async function LandingPage({
   params,
@@ -12,6 +11,8 @@ export default async function LandingPage({
 }) {
   const { locale } = await params;
   const dict = await getDictionary(locale) as any;
+
+  const featureIcons = [Brain, Shield, Sparkles, EyeOff];
 
   return (
     <div className="min-h-screen bg-[var(--color-paper)] text-[var(--color-ink)] flex flex-col font-sans">
@@ -29,15 +30,17 @@ export default async function LandingPage({
           <Link href={`/${locale}/book`} className="hover:text-[var(--color-ink)] transition-colors">{dict.landing.nav_book}</Link>
         </nav>
 
-        <button className="bg-[var(--color-ink)] text-[var(--color-paper)] px-6 py-2.5 rounded-full text-sm font-bold hover:opacity-90 transition-opacity">
-          {dict.landing.btn_download_short || "İndir"}
-        </button>
+        <Link
+          href={`/${locale}/app`}
+          className="bg-[var(--color-ink)] text-[var(--color-paper)] px-6 py-2.5 rounded-full text-sm font-bold hover:opacity-90 transition-opacity"
+        >
+          {dict.landing.btn_signin || "Giriş Yap"}
+        </Link>
       </header>
 
       {/* Hero */}
       <main className="flex-1 flex flex-col items-center justify-center text-center px-4 pt-12 pb-24 max-w-5xl mx-auto w-full space-y-12">
         
-
         <div className="space-y-6">
           <span className="text-xs font-bold text-[var(--color-ink-light)] tracking-widest uppercase mb-4 block">
             {dict.landing.kicker}
@@ -55,19 +58,12 @@ export default async function LandingPage({
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-md mx-auto">
-          <button className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[var(--color-burnt-orange)] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20">
-            <Download size={20} />
-            {dict.landing.btn_download}
-          </button>
-          
-          <Link href="/app" className="w-full sm:w-auto flex items-center justify-center gap-2 bg-transparent text-[var(--color-ink)] border-2 border-[var(--color-ink)]/10 px-8 py-4 rounded-full font-bold text-lg hover:bg-[var(--color-ink)]/5 transition-colors">
-            {dict.landing.btn_test || "Web'de Test Et"}
-          </Link>
-        </div>
-        <span className="text-xs text-[var(--color-ink-light)] font-medium block text-center mt-4">
-          {dict.landing.windows_note}
-        </span>
+        <Link
+          href={`/${locale}/app`}
+          className="flex items-center justify-center gap-2 bg-[var(--color-burnt-orange)] text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20"
+        >
+          {dict.landing.btn_signin || "Giriş Yap"}
+        </Link>
 
         {/* Mockup System Preview */}
         <div className="w-full max-w-5xl mx-auto mt-16 mb-8 text-left">
@@ -99,7 +95,7 @@ export default async function LandingPage({
               <div className="flex flex-col md:flex-row gap-6">
                 <div className="flex-1 bg-white p-6 rounded-2xl border border-[var(--color-ink)]/5 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">{dict.landing.mockup_tag_canceling}</span>
+                    <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">{dict.landing.mockup_tag_canceling}</span>
                     <span className="text-[var(--color-ink-light)] text-sm font-medium">{dict.landing.mockup_time}</span>
                   </div>
                   <h3 className="text-xl font-bold text-[var(--color-ink)] mb-1">{dict.landing.mockup_name}</h3>
@@ -129,26 +125,18 @@ export default async function LandingPage({
 
         {/* Feature grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-16 border-t border-[var(--color-ink)]/5 w-full mt-12">
-          <div className="flex flex-col items-center sm:items-start text-center sm:text-left gap-2">
-            <Shield size={24} className="text-[var(--color-ink-light)] mb-1" />
-            <span className="font-bold text-sm">{dict.landing.feature_privacy_title}</span>
-            <span className="text-xs text-[var(--color-ink-light)]">{dict.landing.feature_privacy_desc}</span>
-          </div>
-          <div className="flex flex-col items-center sm:items-start text-center sm:text-left gap-2">
-            <EyeOff size={24} className="text-[var(--color-ink-light)] mb-1" />
-            <span className="font-bold text-sm">{dict.landing.feature_notrack_title}</span>
-            <span className="text-xs text-[var(--color-ink-light)]">{dict.landing.feature_notrack_desc}</span>
-          </div>
-          <div className="flex flex-col items-center sm:items-start text-center sm:text-left gap-2">
-            <Sparkles size={24} className="text-[var(--color-ink-light)] mb-1" />
-            <span className="font-bold text-sm">{dict.landing.feature_ai_title}</span>
-            <span className="text-xs text-[var(--color-ink-light)]">{dict.landing.feature_ai_desc}</span>
-          </div>
-          <div className="flex flex-col items-center sm:items-start text-center sm:text-left gap-2">
-            <RefreshCcw size={24} className="text-[var(--color-ink-light)] mb-1" />
-            <span className="font-bold text-sm">{dict.landing.feature_improving_title}</span>
-            <span className="text-xs text-[var(--color-ink-light)]">{dict.landing.feature_improving_desc}</span>
-          </div>
+          {[
+            { icon: featureIcons[0], title: dict.landing.feature_privacy_title, desc: dict.landing.feature_privacy_desc },
+            { icon: featureIcons[1], title: dict.landing.feature_notrack_title, desc: dict.landing.feature_notrack_desc },
+            { icon: featureIcons[2], title: dict.landing.feature_ai_title, desc: dict.landing.feature_ai_desc },
+            { icon: featureIcons[3], title: dict.landing.feature_improving_title, desc: dict.landing.feature_improving_desc },
+          ].map(({ icon: Icon, title, desc }, i) => (
+            <div key={i} className="flex flex-col items-center sm:items-start text-center sm:text-left gap-2">
+              <Icon size={24} className="text-[var(--color-ink-light)] mb-1" />
+              <span className="font-bold text-sm">{title}</span>
+              <span className="text-xs text-[var(--color-ink-light)]">{desc}</span>
+            </div>
+          ))}
         </div>
       </main>
     </div>

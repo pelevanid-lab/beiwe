@@ -10,8 +10,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized: No Google access token provided.' }, { status: 401 });
     }
 
-    // Google Drive API V3 Endpoint to list documents only
-    const GOOGLE_DRIVE_API = "https://www.googleapis.com/drive/v3/files?q=mimeType='application/vnd.google-apps.document'&fields=files(id,name,modifiedTime,webViewLink,iconLink,owners)&orderBy=modifiedTime desc";
+    // Google Drive API V3 Endpoint to list documents and spreadsheets
+    const GOOGLE_DRIVE_API = "https://www.googleapis.com/drive/v3/files?q=(mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.google-apps.spreadsheet')&fields=files(id,name,modifiedTime,webViewLink,iconLink,owners,mimeType)&orderBy=modifiedTime desc";
 
     const response = await fetch(GOOGLE_DRIVE_API, {
       method: 'GET',

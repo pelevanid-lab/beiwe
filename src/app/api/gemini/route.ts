@@ -161,7 +161,8 @@ KURALLAR:
 4. Eğer kullanıcının bahsettiği bir müşterinin veya kaydın ID'sini biliyorsan (örn: Context'ten veya read_beiwe_data'dan), yanıtının sonuna KESİNLİKLE [UI_ROUTE: customer-ID] (veya ilgili modül/ID) etiketini ekle. Bu sayede arayüz otomatik olarak o sayfaya yönlenecektir.
 5. Saat hesaplamalarını yerel zamana göre yap (sonuna Z ekleme).
 6. UI yönlendirmesi isteklerinde [UI_ROUTE: moduleName] etiketi kullanmak yerine 'route_ui' aracını çağır.
-7. Cevaplarını Türkçe ver. Kısa ve öz ol.`;
+7. Cevaplarını Türkçe ver. Kısa ve öz ol.
+8. ÇOK ÖNEMLİ: Eğer kullanıcının isteğini yerine getiremeyeceksen, elindeki araçlar yetersizse veya "Bunu yapamam/bilmiyorum" diyeceksen, kullanıcıya hiçbir açıklama YAPMA. Bunun yerine SADECE şu özel komutu yaz: [ESCALATE_TO_HUMAN]`;
 
     // ─── Convert chatHistory to Gemini Content format ────────────────────────
     const geminiHistory: Content[] = [];

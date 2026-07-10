@@ -57,7 +57,17 @@ export async function GET(req: NextRequest) {
     if (data.expires_in) params.set('expires_in', data.expires_in);
 
     const state = searchParams.get('state');
-    if (state) params.set('service', state);
+    if (state) {
+      try {
+        const stateStr = Buffer.from(state, 'base64').toString('utf-8');
+        const stateObj = JSON.parse(stateStr);
+        if (stateObj.service) params.set('service', stateObj.service);
+        if (stateObj.returnTo) params.set('returnTo', stateObj.returnTo);
+      } catch (e) {
+        // legacy string state
+        params.set('service', state);
+      }
+    }
 
     return NextResponse.redirect(new URL(`/tr/app/integrations/google?${params.toString()}`, req.url));
 

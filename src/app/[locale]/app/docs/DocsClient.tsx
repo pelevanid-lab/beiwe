@@ -1,13 +1,17 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, Plus, MoreVertical, LayoutGrid, List as ListIcon, Loader2, ArrowUpRight, X, CloudDownload } from 'lucide-react';
+import { Search, FileText, Plus, MoreVertical, LayoutGrid, List as ListIcon, Loader2, ArrowUpRight, X, CloudDownload, CheckSquare, Table } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { fetchWithGoogleAuth } from '@/lib/google-api';
 import { setClarityContext } from '@/lib/clarity-context';
-import { doc, setDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthProvider';
+import { deleteNode } from '@/lib/saule-core-client';
 import NativeDocEditor from './NativeDocEditor';
+import NativeSheetEditor from './NativeSheetEditor';
+// @ts-ignore
+import LuckyExcel from 'luckyexcel';
 
 interface GoogleDoc {
   id: string;
@@ -18,6 +22,12 @@ interface GoogleDoc {
   owner: string;
   isNative?: boolean;
   content?: string;
+  roomId?: string;
+  roomName?: string;
+  shelfName?: string;
+  smiNodeId?: string;
+  type?: string;
+  mimeType?: string;
 }
 
 const mockDocs: GoogleDoc[] = [
@@ -62,6 +72,9 @@ export default function DocsClient({ dict }: { dict: any }) {
   const [previewDoc, setPreviewDoc] = useState<GoogleDoc | null>(null);
   const [editingNativeDoc, setEditingNativeDoc] = useState<GoogleDoc | null>(null);
   const [showNewDocEditor, setShowNewDocEditor] = useState(false);
+  const [editingNativeSheet, setEditingNativeSheet] = useState<GoogleDoc | null>(null);
+  const [showNewSheetEditor, setShowNewSheetEditor] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [googleDocsList, setGoogleDocsList] = useState<GoogleDoc[]>([]);
   const [selectedGoogleDocs, setSelectedGoogleDocs] = useState<string[]>([]);
@@ -87,13 +100,18 @@ export default function DocsClient({ dict }: { dict: any }) {
             name: file.name,
             modifiedTime: new Date(file.modifiedTime).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' }),
             iconLink: file.iconLink,
+            mimeType: file.mimeType,
           }));
           setGoogleDocsList(formatted);
         } else {
           setImportError('Google Dokümanlar alınamadı.');
         }
       } catch (error: any) {
-        setImportError(error.message || 'Bağlantı hatası.');
+        if (error.message?.includes('No Google access token') || error.message?.includes('Failed to refresh') || error.message?.includes('insufficient authentication scopes')) {
+          window.location.href = `/api/auth/google/connect?returnTo=${encodeURIComponent(window.location.pathname + '?action=import_google_docs')}`;
+        } else {
+          setImportError(error.message || 'Bağlantı hatası.');
+        }
       }
     }
   };
@@ -110,27 +128,73 @@ export default function DocsClient({ dict }: { dict: any }) {
         const docInfo = googleDocsList.find(d => d.id === docId);
         if (!docInfo) continue;
 
-        // 1. Fetch HTML content
-        const exportRes = await fetchWithGoogleAuth(`/api/docs/export?fileId=${docId}`);
-        const exportData = await exportRes.json();
-        
-        if (!exportData.success) {
-          console.error('Export failed for', docInfo.name, exportData.error);
-          continue; // skip failed ones
-        }
+        if (docInfo.mimeType === 'application/vnd.google-apps.spreadsheet') {
+          // 1. Fetch XLSX base64
+          const exportRes = await fetchWithGoogleAuth(`/api/docs/export?fileId=${docId}&mimeType=${docInfo.mimeType}`);
+          const exportData = await exportRes.json();
+          
+          if (!exportData.success || !exportData.isBase64) {
+            console.error('Export failed for spreadsheet', docInfo.name, exportData.error);
+            continue;
+          }
+          
+          // Decode Base64 to ArrayBuffer -> File
+          const byteStr = atob(exportData.data);
+          const buffer = new ArrayBuffer(byteStr.length);
+          const view = new Uint8Array(buffer);
+          for (let i = 0; i < byteStr.length; i++) {
+             view[i] = byteStr.charCodeAt(i);
+          }
+          const file = new File([buffer], docInfo.name + '.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          
+          // Use LuckyExcel to convert
+          await new Promise<void>((resolve, reject) => {
+            LuckyExcel.transformExcelToLucky(file, async (exportJson: any) => {
+              if (exportJson.sheets == null || exportJson.sheets.length === 0) {
+                 reject(new Error("Failed to read excel sheets"));
+                 return;
+              }
+              
+              // 2. Save to Firebase
+              const newNativeDocRef = doc(collection(db, 'beiwe_docs'));
+              await setDoc(newNativeDocRef, {
+                title: docInfo.name,
+                content: JSON.stringify(exportJson.sheets),
+                ownerId: user.uid,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                type: 'spreadsheet'
+              });
+              resolve();
+            });
+          }).catch(err => {
+            console.error("LuckyExcel Error:", err);
+          });
+          
+          importedCount++;
+        } else {
+          // 1. Fetch HTML content
+          const exportRes = await fetchWithGoogleAuth(`/api/docs/export?fileId=${docId}`);
+          const exportData = await exportRes.json();
+          
+          if (!exportData.success) {
+            console.error('Export failed for', docInfo.name, exportData.error);
+            continue; // skip failed ones
+          }
 
-        // 2. Save to Firebase as Native Doc
-        const newNativeDocRef = doc(collection(db, 'beiwe_docs'));
-        await setDoc(newNativeDocRef, {
-          title: docInfo.name,
-          content: exportData.html || '',
-          ownerId: user.uid,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          type: 'document'
-        });
-        
-        importedCount++;
+          // 2. Save to Firebase as Native Doc
+          const newNativeDocRef = doc(collection(db, 'beiwe_docs'));
+          await setDoc(newNativeDocRef, {
+            title: docInfo.name,
+            content: exportData.html || '',
+            ownerId: user.uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            type: 'document'
+          });
+          
+          importedCount++;
+        }
       }
       
       if (importedCount > 0) {
@@ -146,33 +210,64 @@ export default function DocsClient({ dict }: { dict: any }) {
     }
   };
 
-  // Simulate API fetch from our real Google Sync endpoint
-  useEffect(() => {
-    const fetchDocs = async () => {
-      setLoading(true);
-      
-      let allDocs: GoogleDoc[] = [];
+  const toggleMenu = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setOpenMenuId(openMenuId === id ? null : id);
+  };
 
-      // 2. Fetch Native Beiwe Docs
-      if (user) {
-        try {
-          const q = query(
-            collection(db, 'beiwe_docs'),
-            where('ownerId', '==', user.uid),
-            where('type', '==', 'document')
-          );
+  const handleDeleteDoc = async (e: React.MouseEvent, docObj: GoogleDoc) => {
+    e.stopPropagation();
+    if (!docObj.isNative) {
+      alert("Sadece yerel dokümanlar silinebilir.");
+      return;
+    }
+    if (!window.confirm("Bu dokümanı silmek istediğinize emin misiniz?")) return;
+    
+    try {
+      await deleteDoc(doc(db, 'beiwe_docs', docObj.id));
+      if (docObj.smiNodeId && user) {
+        const token = await user.getIdToken();
+        await deleteNode(docObj.smiNodeId, token);
+      }
+      setDocs(docs.filter(d => d.id !== docObj.id));
+      setOpenMenuId(null);
+    } catch (err) {
+      console.error("Hata", err);
+    }
+  };
+
+  // Simulate API fetch from our real Google Sync endpoint
+  const fetchDocs = async () => {
+    setLoading(true);
+    
+    let allDocs: GoogleDoc[] = [];
+
+    // 2. Fetch Native Beiwe Docs
+    if (user) {
+      try {
+        const q = query(
+          collection(db, 'beiwe_docs'),
+          where('ownerId', '==', user.uid),
+          where('type', 'in', ['document', 'spreadsheet'])
+        );
           const snapshot = await getDocs(q);
-          const nativeDocs: GoogleDoc[] = snapshot.docs.map(doc => {
+          let nativeDocs: GoogleDoc[] = snapshot.docs.map(doc => {
             const data = doc.data();
             return {
               id: doc.id,
               name: data.title || 'İsimsiz Doküman',
               modifiedTime: data.updatedAt ? new Date(data.updatedAt.toDate()).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Bilinmeyen Tarih',
               webViewLink: '#',
-              iconLink: 'https://cdn-icons-png.flaticon.com/512/3269/3269817.png', // a generic doc icon
+              iconLink: 'https://cdn-icons-png.flaticon.com/512/3269/3269817.png',
               owner: 'Ben',
               isNative: true,
-              content: data.content
+              content: data.content,
+              roomId: data.roomId,
+              roomName: data.roomName,
+              shelfId: data.shelfId,
+              shelfName: data.shelfName,
+              smiNodeId: data.smiNodeId,
+              type: data.type || 'document'
             };
           });
           
@@ -189,9 +284,6 @@ export default function DocsClient({ dict }: { dict: any }) {
         }
       }
 
-      setDocs(allDocs);
-      setLoading(false);
-      
       // AI Bağlamı - Listedeki dokümanları AI'ya bildir
       setClarityContext({
         module: 'docs',
@@ -201,13 +293,24 @@ export default function DocsClient({ dict }: { dict: any }) {
           totalCount: allDocs.length
         }
       });
-    };
+      
+      setDocs(allDocs);
+      setLoading(false);
+  };
 
-    if (user) {
-      fetchDocs();
+  useEffect(() => {
+    fetchDocs();
+    
+    // Check if we should auto-open the import modal
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('action') === 'import_google_docs') {
+        handleOpenImportModal();
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+      }
     }
-  }, [user, showNewDocEditor, editingNativeDoc, showImportModal]); // re-fetch when closing editors or modals
-
+  }, [user, showNewDocEditor, editingNativeDoc, showImportModal, showNewSheetEditor, editingNativeSheet]); // re-fetch when closing editors or modals
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-paper)] p-8 overflow-y-auto w-full relative">
       <div className="max-w-6xl mx-auto w-full space-y-8">
@@ -228,14 +331,16 @@ export default function DocsClient({ dict }: { dict: any }) {
               <Search size={18} /> Ara
             </button>
             <button 
-              disabled
-              className="relative bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 opacity-50 cursor-not-allowed shadow-sm"
+              onClick={handleOpenImportModal}
+              className="relative bg-white border border-[var(--color-ink)]/10 text-[var(--color-ink)] px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
             >
               <CloudDownload size={18} /> Google'dan Aktar
-              <span className="absolute -top-2 -right-2 bg-[var(--color-burnt-orange)] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">{tComingSoon}</span>
             </button>
             <button onClick={() => setShowNewDocEditor(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20">
-              <Plus size={18} /> Yeni Doküman
+              <Plus size={18} /> {dict?.app?.docs?.btn_text_doc || 'Metin Belgesi'}
+            </button>
+            <button onClick={() => setShowNewSheetEditor(true)} className="bg-green-600 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-green-700 transition-colors shadow-md shadow-green-500/20">
+              <Table size={18} /> {dict?.app?.docs?.btn_sheet || 'Tablo (Excel)'}
             </button>
           </div>
         </header>
@@ -271,9 +376,9 @@ export default function DocsClient({ dict }: { dict: any }) {
             {docs.map(doc => (
               viewMode === 'grid' ? (
                 // Grid Item
-                <div key={doc.id} onClick={() => doc.isNative ? setEditingNativeDoc(doc) : setPreviewDoc(doc)} className="group bg-white border border-[var(--color-ink)]/10 rounded-2xl overflow-hidden hover:shadow-xl transition-all hover:border-blue-500/30 flex flex-col cursor-pointer">
+                <div key={doc.id} onClick={() => doc.isNative ? (doc.type === 'spreadsheet' ? setEditingNativeSheet(doc) : setEditingNativeDoc(doc)) : setPreviewDoc(doc)} className="group bg-white border border-[var(--color-ink)]/10 rounded-2xl overflow-hidden hover:shadow-xl transition-all hover:border-blue-500/30 flex flex-col cursor-pointer">
                   <div className="h-32 bg-gray-50 border-b border-[var(--color-ink)]/5 flex items-center justify-center p-4 relative group-hover:bg-blue-50/50 transition-colors">
-                    <FileText size={48} className="text-gray-300 group-hover:text-blue-200 transition-colors" />
+                    {doc.type === 'spreadsheet' ? <Table size={48} className="text-gray-300 group-hover:text-green-200 transition-colors" /> : <FileText size={48} className="text-gray-300 group-hover:text-blue-200 transition-colors" />}
                     <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <div className="bg-blue-600 text-white p-3 rounded-full shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform">
                         <ArrowUpRight size={20} />
@@ -283,7 +388,7 @@ export default function DocsClient({ dict }: { dict: any }) {
                   <div className="p-4 flex-1 flex flex-col">
                     <div className="flex items-start gap-3 mb-2">
                       {doc.isNative ? (
-                        <FileText className="w-5 h-5 shrink-0 text-orange-500" />
+                        doc.type === 'spreadsheet' ? <Table className="w-5 h-5 shrink-0 text-green-500" /> : <FileText className="w-5 h-5 shrink-0 text-orange-500" />
                       ) : (
                         <img src={doc.iconLink} alt="Docs" className="w-5 h-5 shrink-0" />
                       )}
@@ -291,19 +396,50 @@ export default function DocsClient({ dict }: { dict: any }) {
                         {doc.name}
                       </h3>
                     </div>
-                    <div className="mt-auto flex items-center justify-between text-xs text-[var(--color-ink-light)]">
+                    <div className="mt-auto flex items-center justify-between text-xs text-[var(--color-ink-light)] relative">
                       <span>{doc.modifiedTime}</span>
-                      <button className="p-1 hover:bg-[var(--color-ink)]/5 rounded-md transition-colors" onClick={(e) => e.stopPropagation()}>
-                        <MoreVertical size={14} />
-                      </button>
+                      <div className="relative">
+                        <button 
+                          className={`p-1 rounded-md transition-colors ${openMenuId === doc.id ? 'bg-[var(--color-ink)]/10 text-[var(--color-ink)]' : 'hover:bg-[var(--color-ink)]/5'}`}
+                          onClick={(e) => toggleMenu(e, doc.id)}
+                        >
+                          <MoreVertical size={14} />
+                        </button>
+                        {openMenuId === doc.id && (
+                          <div className="absolute bottom-full right-0 mb-2 w-36 bg-white rounded-xl shadow-xl border border-[var(--color-ink)]/10 py-1 z-20">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); doc.isNative ? setEditingNativeDoc(doc) : setPreviewDoc(doc); }}
+                              className="w-full text-left px-4 py-2 text-sm text-[var(--color-ink)] hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <ArrowUpRight size={14} /> Aç
+                            </button>
+                            {doc.isNative && (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); doc.type === 'spreadsheet' ? setEditingNativeSheet(doc) : setEditingNativeDoc(doc); }}
+                                className="w-full text-left px-4 py-2 text-sm text-[var(--color-ink)] hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                <CheckSquare size={14} /> Düzenle
+                              </button>
+                            )}
+                            {doc.isNative && (
+                              <button 
+                                onClick={(e) => handleDeleteDoc(e, doc)}
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                              >
+                                <X size={14} /> Sil
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
               ) : (
                 // List Item
-                <div key={doc.id} onClick={() => doc.isNative ? setEditingNativeDoc(doc) : setPreviewDoc(doc)} className="group bg-white border border-[var(--color-ink)]/10 rounded-xl p-3 flex items-center gap-4 hover:shadow-md transition-all hover:border-blue-500/30 cursor-pointer">
+                <div key={doc.id} onClick={() => doc.isNative ? (doc.type === 'spreadsheet' ? setEditingNativeSheet(doc) : setEditingNativeDoc(doc)) : setPreviewDoc(doc)} className="group bg-white border border-[var(--color-ink)]/10 rounded-xl p-3 flex items-center gap-4 hover:shadow-md transition-all hover:border-blue-500/30 cursor-pointer">
                   {doc.isNative ? (
-                    <FileText className="w-6 h-6 shrink-0 ml-2 text-orange-500" />
+                    doc.type === 'spreadsheet' ? <Table className="w-6 h-6 shrink-0 ml-2 text-green-500" /> : <FileText className="w-6 h-6 shrink-0 ml-2 text-orange-500" />
                   ) : (
                     <img src={doc.iconLink} alt="Docs" className="w-6 h-6 shrink-0 ml-2" />
                   )}
@@ -318,9 +454,40 @@ export default function DocsClient({ dict }: { dict: any }) {
                   <div className="w-32 text-xs text-[var(--color-ink-light)] text-right">
                     {doc.modifiedTime}
                   </div>
-                  <button className="p-2 text-[var(--color-ink-light)] hover:bg-[var(--color-ink)]/5 rounded-lg transition-colors" onClick={(e) => e.stopPropagation()}>
-                    <MoreVertical size={16} />
-                  </button>
+                  <div className="relative">
+                    <button 
+                      className={`p-2 rounded-lg transition-colors ${openMenuId === doc.id ? 'bg-[var(--color-ink)]/10 text-[var(--color-ink)]' : 'text-[var(--color-ink-light)] hover:bg-[var(--color-ink)]/5'}`}
+                      onClick={(e) => toggleMenu(e, doc.id)}
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                    {openMenuId === doc.id && (
+                      <div className="absolute top-full right-0 mt-2 w-36 bg-white rounded-xl shadow-xl border border-[var(--color-ink)]/10 py-1 z-20">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); doc.isNative ? setEditingNativeDoc(doc) : setPreviewDoc(doc); }}
+                          className="w-full text-left px-4 py-2 text-sm text-[var(--color-ink)] hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <ArrowUpRight size={14} /> Aç
+                        </button>
+                        {doc.isNative && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); doc.type === 'spreadsheet' ? setEditingNativeSheet(doc) : setEditingNativeDoc(doc); }}
+                            className="w-full text-left px-4 py-2 text-sm text-[var(--color-ink)] hover:bg-gray-50 flex items-center gap-2"
+                          >
+                            <CheckSquare size={14} /> Düzenle
+                          </button>
+                        )}
+                        {doc.isNative && (
+                          <button 
+                            onClick={(e) => handleDeleteDoc(e, doc)}
+                            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                          >
+                            <X size={14} /> Sil
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )
             ))}
@@ -474,21 +641,41 @@ export default function DocsClient({ dict }: { dict: any }) {
         </div>
       )}
 
-      {/* Native Document Editor */}
       {showNewDocEditor && (
-        <NativeDocEditor 
-          onClose={() => setShowNewDocEditor(false)} 
-          onSaved={() => setShowNewDocEditor(false)} 
-        />
+        <NativeDocEditor dict={dict} onClose={() => setShowNewDocEditor(false)} onSaved={() => setShowNewDocEditor(false)} />
       )}
 
       {editingNativeDoc && (
         <NativeDocEditor 
-          initialDocId={editingNativeDoc.id}
-          initialTitle={editingNativeDoc.name}
-          initialContent={editingNativeDoc.content}
+          dict={dict}
+          initialDoc={editingNativeDoc}
           onClose={() => setEditingNativeDoc(null)} 
           onSaved={() => setEditingNativeDoc(null)} 
+        />
+      )}
+
+      {/* Native Sheet Editor */}
+      {showNewSheetEditor && (
+        <NativeSheetEditor
+          dict={dict}
+          initialDoc={{}}
+          onClose={() => setShowNewSheetEditor(false)}
+          onSaved={(shouldClose = true) => {
+            if (shouldClose !== false) setShowNewSheetEditor(false);
+            fetchDocs();
+          }}
+        />
+      )}
+
+      {editingNativeSheet && (
+        <NativeSheetEditor 
+          dict={dict}
+          initialDoc={editingNativeSheet}
+          onClose={() => setEditingNativeSheet(null)} 
+          onSaved={(shouldClose = true) => {
+            if (shouldClose !== false) setEditingNativeSheet(null);
+            fetchDocs();
+          }}
         />
       )}
     </div>

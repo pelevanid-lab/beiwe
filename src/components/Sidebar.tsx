@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bookmark, Users, Calendar, Link2, Settings, MonitorDown, Briefcase, Inbox, FileText, History } from 'lucide-react';
+import { Bookmark, Users, Calendar, Settings, Briefcase, Mail, FileText, CheckSquare, Brain } from 'lucide-react';
 import { LogoIcon } from '@/components/Logo';
 import UserSidebarWidget from '@/components/UserSidebarWidget';
 import React, { useState } from 'react';
-import { WorkspaceModal } from '@/components/WorkspaceModal';
+import { useAuth } from '@/components/AuthProvider';
 
 const SidebarItem = ({ icon: Icon, label, href, active, onClick, disabled, badge }: { icon: any, label: string, href?: string, active: boolean, onClick?: () => void, disabled?: boolean, badge?: string }) => {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -41,13 +41,15 @@ const SidebarItem = ({ icon: Icon, label, href, active, onClick, disabled, badge
 
 export default function Sidebar({ dict }: { dict?: any }) {
   const pathname = usePathname();
-  const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const locale = pathname.split('/')[1] || 'tr';
-  
-  // Use translations if dictionary has it, else default to 'Yakında'
-  const tComingSoon = dict?.common?.coming_soon || 'Yakında';
+  const { user } = useAuth();
 
-  // Aktif kontrolü: pathname eşleşmesine bakıyoruz
+  // Inbox label: show user's Gmail address (shortened) or default
+  const inboxLabel = user?.email
+    ? user.email.split('@')[0] + '@' + user.email.split('@')[1]?.slice(0, 5) + '...'
+    : (dict?.nav_inbox || 'E-posta');
+
+  // Active check
   const isActive = (path: string) => {
     if (path === '/app') {
       return pathname === `/${locale}/app` || pathname === `/${locale}/app/`;
@@ -68,33 +70,32 @@ export default function Sidebar({ dict }: { dict?: any }) {
       </div>
       
       <nav className="flex-1 flex flex-col items-center gap-6 w-full">
-        {/* CRM Alanı */}
+        {/* Birincil Alan */}
+        <SidebarItem icon={CheckSquare} label={dict?.nav_tasks || "Görevler"} href={`/${locale}/app/tasks`} active={isActive('/tasks')} />
+        <SidebarItem icon={Users} label={dict?.nav_customers || "Kişiler"} href={`/${locale}/app/customers`} active={isActive('/customers')} />
+        <SidebarItem icon={Calendar} label={dict?.nav_appointments || "Takvim"} href={`/${locale}/app/appointments`} active={isActive('/appointments')} />
+        <SidebarItem icon={Mail} label={inboxLabel} href={`/${locale}/app/inbox`} active={isActive('/inbox')} />
         <SidebarItem icon={FileText} label={dict?.nav_docs || "Dokümanlar"} href={`/${locale}/app/docs`} active={isActive('/docs')} />
-        <SidebarItem icon={Users} label={dict?.nav_customers || "Müşteriler"} href={`/${locale}/app/customers`} active={isActive('/customers')} />
-        <SidebarItem icon={Calendar} label={dict?.nav_appointments || "Randevular"} href={`/${locale}/app/appointments`} active={isActive('/appointments')} />
         
         {/* Ayırıcı Çizgi */}
         <div className="w-10 h-[2px] bg-[var(--color-ink)]/20 rounded-full my-1" />
         
         {/* Genel / Yönetim Alanı */}
         <SidebarItem 
-          icon={Briefcase} 
-          label={dict?.nav_workspace || "İşletmeniz/Çalışma Alanınız"} 
-          active={isWorkspaceModalOpen} 
-          onClick={() => setIsWorkspaceModalOpen(true)} 
+          icon={Brain} 
+          label={dict?.nav_workspace || "Zihin Odaları"} 
+          href={`/${locale}/app/workspaces`} 
+          active={isActive('/workspaces')} 
         />
-        <SidebarItem icon={Link2} label={dict?.nav_integrations || "Entegrasyonlar"} href={`/${locale}/app/integrations`} active={isActive('/integrations')} />
-        <SidebarItem icon={MonitorDown} label={dict?.nav_download || "Uygulamayı İndir"} href={`/${locale}/app/download`} active={isActive('/download')} />
+        {/* Entegrasyonlar ve Download GIZLI — kaldırılmadı, sadece render edilmiyor */}
       </nav>
 
       <div className="flex flex-col items-center gap-6 w-full mt-auto">
         <SidebarItem icon={Bookmark} label={dict?.nav_clarity_notes || "Netleştirici Notlar"} href={`/${locale}/app/notes`} active={isActive('/notes')} />
-
         <SidebarItem icon={Settings} label={dict?.nav_settings || "Ayarlar"} href="#" active={false} />
         <UserSidebarWidget />
       </div>
 
-      <WorkspaceModal isOpen={isWorkspaceModalOpen} onClose={() => setIsWorkspaceModalOpen(false)} />
     </aside>
   );
 }

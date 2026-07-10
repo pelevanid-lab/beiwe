@@ -1,7 +1,7 @@
-# Книга Beiwe
-### Багаторівнева конституція розумної робочої області
+# Beiwe Kitabı
+### Çok Katmanlı Akıllı Asistan Anayasası
 
-*Версія 2.0*
+*Versiyon 2.0*
 
 > "Beiwe için inşa edilen her şey bu kitaba uymak zorundadır."
 
@@ -9,18 +9,18 @@ Bu doküman bir pazarlama materyali değildir. Bir tasarım rehberi de değildir
 
 ---
 
-## Розділ 1 — Чому існує Beiwe?
+## Bölüm 1 — Beiwe Neden Var?
 *Why Beiwe Exists*
 
 **Amaç: Vizyon**
 
-> **Not:** Beiwe bir web tarayıcısı (browser) değildir. Tarayıcıların akışkan ve tanıdık arayüz dilini (sekme, komut çubuğu) kullanan, ancak amacı web'de gezinmek değil şirket verilerini yönetmek olan Çok Katmanlı bir Akıllı Çalışma Alanıdır (Workspace/OS).
+> **Not:** Beiwe bir web tarayıcısı (browser) değildir. Tarayıcıların akışkan ve tanıdık arayüz dilini (sekme, komut çubuğu) kullanan, ancak amacı web'de gezinmek değil; hem bireylerin (özellikle DEB/ADHD gibi kaotik zihinlere sahip olanların) kişisel hayatlarını, hem de şirketlerin operasyonlarını yönettikleri Çok Katmanlı bir Akıllı Asistandır (Assistant/OS). **Çok Katmanlı (Multi-Layered)** kavramı eskiden işin katmanlarını temsil ederken, artık **Yapay Zeka ve İnsan** (Human-in-the-Loop) katmanlarının kusursuz birlikteliğini temsil eder.
 
-### Günümüz iş dünyasının problemi: Yazılım Yorgunluğu (SaaS Fatigue)
-Son on yılda yazılımlar şirketleri daha verimli yapmak için tasarlandı. Ancak bugün geldiğimiz noktada şirketler verimli değil, bölünmüş durumda. Müşteri verisi CRM'de, toplantılar takvimde, görevler proje yönetim aracında, faturalar finans uygulamasında parçalanmış halde duruyor. Bir kullanıcı bir işi çözmek için üç farklı uygulamayı açıp aralarında zihinsel bir efor harcamak zorunda kalıyor. Günümüz yazılımları bilgiyi dijitalleştirdi, ama bağlamı (context) öldürdü.
+### Günümüzün problemi: Bilişsel Yük ve Yazılım Yorgunluğu (SaaS Fatigue)
+Son on yılda yazılımlar şirketleri daha verimli yapmak için tasarlandı. Ancak bugün geldiğimiz noktada hem bireyler hem de şirketler verimli değil, bölünmüş durumda. DEB'li (Dikkat Eksikliği Bozukluğu) bir birey için notlar bir uygulamada, takvim diğerinde, görevler başka bir yerdedir. Müşteri verisi CRM'de, randevular takvimde parçalanmış halde duruyor. Kullanıcı bir işi çözmek için üç farklı uygulamayı açıp aralarında zihinsel bir efor harcamak zorunda kalıyor. Günümüz yazılımları bilgiyi dijitalleştirdi, ama bağlamı (context) öldürdü ve bilişsel yükü zirveye çıkardı.
 
 ### Statik Menü paradigmasının sınırları
-Geleneksel yazılımlar tek bir varsayım üzerine kuruludur: Kullanıcı ne yapacağını ve menüde nereye tıklayacağını bilir. Ancak gerçek hayattaki işler menülere sığmaz. "Ahmet Bey'in dünkü randevusu neden iptal oldu?", "Şu an öncelikli görevim ne?" gibi sorular, statik sayfalara tıklayarak değil, veriler arasında bağ kurarak cevaplanabilir. Menüler pasiftir; kullanıcının tıklamasını bekler. Oysa modern bir çalışma alanı kullanıcının niyetine proaktif olarak uyum sağlamalıdır.
+Geleneksel yazılımlar tek bir varsayım üzerine kuruludur: Kullanıcı ne yapacağını ve menüde nereye tıklayacağını bilir. Ancak gerçek hayattaki işler menülere sığmaz. "Ahmet Bey'in dünkü randevusu neden iptal oldu?", "Şu an öncelikli görevim ne?" gibi sorular, statik sayfalara tıklayarak değil, veriler arasında bağ kurarak cevaplanabilir. Menüler pasiftir; kullanıcının tıklamasını bekler. Oysa modern bir asistan kullanıcının niyetine proaktif olarak uyum sağlamalıdır.
 
 ### AI neden tek başına çözüm değil
 Yapay zekâ asistanları bu sorunu kısmen çözdü: Artık menülerde gezinmek yerine sisteme soru sorabiliyoruz. Ama bu da yeni bir yanıltmaca yarattı. Sohbet ekranı, iş yapmak için tasarlanmış bir arayüz (UI) değildir; sadece metin üretir. Kullanıcı sadece metin görmek değil, aynı zamanda işlem yapmak (randevu oluşturmak, faturayı ödemek) ister. Beiwe'nin reddettiği tam olarak budur: Yapay zekâ, sadece konuşulan soyut bir varlık değil, arayüzü kontrol eden bir yönlendirici (router) olmalıdır.
@@ -28,15 +28,15 @@ Yapay zekâ asistanları bu sorunu kısmen çözdü: Artık menülerde gezinmek 
 ### Context neden kayboluyor
 Bugünün uygulamaları silolar halinde çalışır. Her sekme kendi başına bir adadır; birbirinden habersiz, birbirine bağlanmayan, oturum kapandığında yok olan geçici arayüz parçacıklarıdır. Kullanıcı dün girdiği müşteri notunu bugün takvime bağlayamaz, çünkü yazılımların ortak bir hafızası yoktur — sadece veritabanları vardır. Veritabanı ham bir kayıt defteridir, anlamlandırılmış bir bağlam değil.
 
-### Workspace neden yeniden tasarlanmalı
-Yazılım, otuz yıldır aynı temel metaforla çalışır: Üst menü, sol menü, formlar ve butonlar. Bu metafor, kullanıcının sisteme uyması üzerine kuruludur. Ama modern ihtiyaç artık kullanıcının yazılıma uyum sağlaması değil, yazılımın kullanıcının niyetine (intent) uyum sağlamasıdır. Arayüzün temel birimi artık "menü" değil, "niyet" olmalıdır. Bu, kozmetik bir güncelleme değil; çalışma alanının (workspace) kendisinin ne olduğuna dair kök bir yeniden tanımdır.
+### Asistanlık neden yeniden tasarlanmalı
+Yazılım, otuz yıldır aynı temel metaforla çalışır: Üst menü, sol menü, formlar ve butonlar. Bu metafor, kullanıcının sisteme uyması üzerine kuruludur. Ama modern ihtiyaç artık kullanıcının yazılıma uyum sağlaması değil, yazılımın kullanıcının niyetine (intent) uyum sağlamasıdır. Arayüzün temel birimi artık "menü" değil, "niyet" olmalıdır. Bu, kozmetik bir güncelleme değil; asistanlığın (assistant) kendisinin ne olduğuna dair kök bir yeniden tanımdır.
 
 ### Clarity Engine (Netlik Motoru) Neden Kalbimizdir?
-Beiwe devasa, çok katmanlı bir araçtır (CRM, İK, Finans). Bu kadar derin bir yapıda kaybolmamak için statik menüler yetersizdir. Beiwe'nin tek bir hedefi vardır: **Netlik**. Kullanıcının girdiği cümleyi anlayan, bağlamı süzen ve o an tam olarak hangi modüle (hangi sekmeye) ihtiyaç varsa onu anında kullanıcının önüne seren **Clarity Engine**, Beiwe'nin kalbidir. Bir özellik, kullanıcının zihnindeki karmaşayı azaltıp netliği artırmıyorsa, o özellik Beiwe'de yer almamalıdır.
+Beiwe devasa, çok katmanlı bir araçtır (Kişisel Asistan, CRM, Görev Yönetimi). Bu kadar derin bir yapıda kaybolmamak, özellikle kaotik çalışan zihinler için hayati önem taşır. Statik menüler bu kitle için yetersiz ve yorucudur. Beiwe'nin tek bir hedefi vardır: **Netlik**. Kullanıcının girdiği cümleyi anlayan, bağlamı süzen ve o an tam olarak hangi modüle (hangi sekmeye) ihtiyaç varsa onu anında kullanıcının önüne seren **Clarity Engine**, Beiwe'nin kalbidir. Bir özellik, kullanıcının zihnindeki karmaşayı azaltıp netliği artırmıyorsa, o özellik Beiwe'de yer almamalıdır.
 
 ---
 
-## Розділ 2 — Маніфест
+## Bölüm 2 — Manifesto
 *Manifesto*
 
 **Amaç: Felsefe**
@@ -52,8 +52,8 @@ Bu bölüm teknik değildir. İlham vericidir. Burada yazılanlar bir özellik l
 > **Memory is the future of work.**
 > *Hafıza, çalışmanın geleceğidir.*
 
-> **The workspace should think with you, not wait for you.**
-> *Çalışma alanı (Workspace) tıklamanı beklememeli, seninle birlikte düşünmelidir.*
+> **The assistant should think with you, not wait for you.**
+> *Asistan (Assistant) tıklamanı beklememeli, seninle birlikte düşünmelidir.*
 
 > **A module is a place. Intent is a journey.**
 > *Bir modül (CRM/Takvim) statik bir yerdir. Kullanıcının niyeti ise bir yolculuktur.*
@@ -69,7 +69,7 @@ Bu bölüm teknik değildir. İlham vericidir. Burada yazılanlar bir özellik l
 
 ---
 
-## Розділ 3 — Модель ясності
+## Bölüm 3 — Netlik Modeli
 *The Clarity Model*
 
 **Amaç: Ürün Mantığı**
@@ -110,10 +110,10 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Розділ 4 — Принципи робочої області
-*Workspace Principles*
+## Bölüm 4 — Asistan İlkeleri
+*Assistant Principles*
 
-**Amaç: Çalışma Alanı Davranışı**
+**Amaç: Asistan Davranışı**
 
 **İlke 1 — Her şey komut satırından / arama çubuğundan başlar.**
 **İlke 2 — Sekmelerden daha önemli olan bağlamdır.**
@@ -123,32 +123,32 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Розділ 5 — Принципи продукту
+## Bölüm 5 — Ürün İlkeleri
 *Product Principles*
 
 **Amaç: Karar Mekanizması**
 
 **Features are not the product. Clarity is.** (Özellikler ürün değildir. Netlik üründür.)
-**AI is the engine, the workspace is the body.** (Yapay zekâ motordur, çalışma alanı (workspace) bedendir.)
+**AI is the engine, the assistant is the body.** (Yapay zekâ motordur, asistan (assistant) bedendir.)
 **Context outranks structure.** (Bağlam, katı hiyerarşik yapıdan daha üstündür.)
 **Memory belongs to the user.** (Hafıza kullanıcıya aittir. Veri yereldir ve şifrelidir.)
 **Transparency over optimization.** (Şeffaflık, optimizasyondan önce gelir.)
 
 ---
 
-## Розділ 6 — Мова дизайну
+## Bölüm 6 — Tasarım Dili
 *Design Language*
 
 **Amaç: Görsel Sistem**
 
 - **Typography:** Başlıklar Playfair Display (Editoryal, düşünen), gövde metni Outfit (Okunabilir, net).
 - **Renkler:** Zemin kırık beyaz (#FAFAF8), Metin mürekkep tonu. Vurgu eylemleri için Turuncu-amber. Konsensüs/Uzlaşı sinyalleri için Yeşil.
-- **Düzen:** Çok katmanlı ama ferah. Merkezi hizalı komut çubuğu. Alt kısımda esnek sekme yönetimi (Workspace).
+- **Düzen:** Çok katmanlı ama ferah. Merkezi hizalı komut çubuğu. Alt kısımda esnek sekme yönetimi (Asistan).
 - **Bileşenler:** Clarity Engine'in komut çubuğu her zaman kutsaldır. Gölgeler minimaldir, derinlik hiyerarşiden gelir.
 
 ---
 
-## Розділ 7 — Мова взаємодії
+## Bölüm 7 — Etkileşim Dili
 *Interaction Language*
 
 **Amaç: Kullanıcı Akışı ve Sürtünme Yönetimi**
@@ -162,7 +162,7 @@ Yapılan eylem, nedenleriyle birlikte Saule'nin hafıza katmanına yazılır. Bi
 
 ---
 
-## Розділ 8 — Мова рухів
+## Bölüm 8 — Hareket Dili
 *Motion Language*
 
 **Amaç: Animasyon Sistemi**
@@ -171,12 +171,12 @@ Hareket, dikkat çekmek için değil, geçişleri anlamlandırmak için vardır.
 
 ---
 
-## Розділ 9 — Інтеграція Saule
+## Bölüm 9 — Saule Entegrasyonu
 *Saule Integration*
 
 **Amaç: SML + Beiwe İlişkisi**
 
-**Beiwe bedendir, Saule zihindir.** Beiwe (Çalışma Alanı / Arayüz) ile Saule (Hafıza / Veritabanı) arasında Decoupled (Gevşek Bağlı) ve net bir API ayrımı vardır.
+**Beiwe bedendir, Saule zihindir.** Beiwe (Asistan / Arayüz) ile Saule (Hafıza / Veritabanı) arasında Decoupled (Gevşek Bağlı) ve net bir API ayrımı vardır.
 İkisi arasındaki iletişim **SMI (Semantic Memory Interface)** adını verdiğimiz köprü üzerinden sağlanır.
 
 ### Teknik Bağ ve Veri Akışı
@@ -188,6 +188,14 @@ Hareket, dikkat çekmek için değil, geçişleri anlamlandırmak için vardır.
 ### Soğuk Başlangıç (Cold Start) ve Tanışma
 Sistem ilk kurulduğunda SML veritabanı boştur. Bu "soğuk başlangıç" anında Beiwe'nin kullanıcıyı (ve şirketini) anlayabilmesi için, ilk kurulumda kısa bir "tanışma sohbeti" (Onboarding) yapılır. Şirketin sektörü, iş yapış biçimi ve öncelikleri bu sohbetle alınır ve doğrudan Saule'ye kaydedilir. Böylece ilk gerçek eylemde sistem sıfırdan başlamaz.
 
+### İnsan-Yapay Zeka Ortak Hafızası (Human-in-the-Loop & Shared Memory)
+Yapay zeka (Clarity Engine) tıkanırsa veya sistem izin vermezse (örneğin kullanıcının çözülemeyen özel bir sorunu varsa), Beiwe sessizce aradan çekilir ve işlemi Saule destek merkezindeki **insan asistanlara** (Canlı Destek) devreder. 
+Bu aşamada:
+1. Kullanıcının baktığı ekran (Context) ve geçmiş sohbeti Saule asistanına bilet (ticket) olarak aktarılır.
+2. İnsan asistan ve müşteri konuşur; asistan gerekirse müşteri adına doğrudan sistem eylemleri yapar (Örn: Randevu oluşturur).
+3. Bilet çözüldüğünde, insanla yapılan bu sohbetin *tamamı* ve asistanın yaptığı işlemler, tek bir transkript (anı) halinde paketlenerek tekrar Saule SML ağına (Memory) geri kazınır (`ingest`).
+Böylece ertesi gün müşteri tekrar yapay zekaya bağlandığında, Gemini API dünkü "insan konuşmasını" hatırlar ve "Dün destek ekibimiz size şifre sıfırlama yollamıştı, sorun çözüldü mü?" diyerek eşsiz bir bağlamsal zeka sergiler. Parçalanmış hafıza, insan-makine ayrımı olmaksızın tek bir çatı altında birleştirilmiş olur.
+
 *Saule hakkında daha detaylı bilgi için: [getsaule.com](https://getsaule.com)*
 
 ---
@@ -198,7 +206,7 @@ Sistem ilk kurulduğunda SML veritabanı boştur. Bu "soğuk başlangıç" anın
 **Amaç: Kod ve Sistem**
 
 ```
-Workspace (Çok Katmanlı OS)
+Assistant (Çok Katmanlı OS)
    ↓
 Frontend (Beiwe / Next.js)
    ↓
@@ -241,7 +249,7 @@ En katı veri güvenliği kurallarına sahip şirketler (Sağlık, Finans) için
 
 **Amaç: Şeffaf ve Güvenilir İş Yazılımı**
 
-Beiwe, kullanıcı ve şirket verisini satmaz. Açık kaynak / kendi sunucunda barındırma (Self-hosted) modeline saygı duyar. Ticari varlığını sürdürmek için "güven" ve "kurumsal lisanslama" modellerini kullanır. Beiwe'nin modüler yapısı, şirketlerin sadece ihtiyaç duydukları katmanları (CRM, İK vb.) satın alarak Clarity Engine'i kendi iş akışlarına entegre etmelerini sağlar.
+Beiwe, kullanıcı ve şirket verisini satmaz. Açık kaynak / kendi sunucunda barındırma (Self-hosted) modeline saygı duyar. Ticari varlığını sürdürmek için "güven" ve "kurumsal/bireysel lisanslama" modellerini kullanır. Beiwe'nin modüler yapısı, hem bireylerin (özellikle DEB'li kullanıcıların) kişisel asistan olarak kullanmasına, hem de küçük işletmelerin sadece ihtiyaç duydukları katmanları satın alarak Clarity Engine'i kendi iş akışlarına entegre etmelerine olanak tanır.
 
 ---
 
@@ -287,4 +295,4 @@ Beiwe bir netlik iddiasıdır. Herhangi bir özellik, ekran ya da satır kod gö
 
 ---
 
-*© 2026 PEH Solutions — Книга Beiwe ürünün evrimiyle birlikte "Çok Katmanlı Akıllı Çalışma Alanı" (Workspace/OS) anayasasına dönüştürülmüştür.*
+*© 2026 PEH Solutions — Beiwe Kitabı ürünün evrimiyle birlikte "Çok Katmanlı Akıllı Çalışma Alanı" (Workspace/OS) anayasasına dönüştürülmüştür.*

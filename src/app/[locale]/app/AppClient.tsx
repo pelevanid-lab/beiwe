@@ -21,6 +21,7 @@ import CustomersClient from './customers/CustomersClient';
 import CustomerDetailClient from './customers/[id]/CustomerDetailClient';
 import InboxClient from './inbox/InboxClient';
 import DocsClient from './docs/DocsClient';
+import DailyPanel from './DailyPanel';
 
 export default function AppClient({ dict }: { dict: any }) {
   const router = useRouter();
@@ -69,6 +70,10 @@ export default function AppClient({ dict }: { dict: any }) {
   // Kullanıcının baktığı ekranın bağlamı (clarity-context store'dan)
   const [activeContextString, setActiveContextString] = useState<string>('');
 
+  // Live Support (Human-in-the-Loop) State
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const [liveMessages, setLiveMessages] = useState<any[]>([]);
+
   const openTab = (tab: AppTab) => {
     setTabs(prev => {
       if (!prev.find(t => t.id === tab.id)) {
@@ -114,6 +119,69 @@ export default function AppClient({ dict }: { dict: any }) {
     });
     return () => unsubscribe();
   }, []);
+
+  // Listen to Active Live Support Ticket
+  useEffect(() => {
+    if (!activeTicketId) {
+      setLiveMessages([]);
+      return;
+    }
+    
+    // Listen to ticket status
+    const { onSnapshot, doc, collection, query, orderBy } = require('firebase/firestore');
+    const unsubTicket = onSnapshot(doc(db, 'saule_support_tickets', activeTicketId), (docSnap: any) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.status === 'resolved') {
+          // 1. Fetch transcript and ingest into Semantic Memory
+          const { getDocs } = require('firebase/firestore');
+          getDocs(query(collection(db, `saule_support_tickets/${activeTicketId}/messages`), orderBy('createdAt', 'asc')))
+            .then(async (snap: any) => {
+              let transcript = `[CANLI DESTEK GÖRÜŞMESİ - Bilet: ${activeTicketId}]\n`;
+              snap.forEach((docSnap: any) => {
+                 const msgData = docSnap.data();
+                 const sender = msgData.senderName || (msgData.sender === 'user' ? 'Müşteri' : 'Destek');
+                 transcript += `${sender}: ${msgData.text}\n`;
+              });
+              
+              if (user) {
+                const token = await user.getIdToken();
+                await ingestMemory(
+                  transcript,
+                  'knowledge',
+                  { source: 'human_handoff', author: user.uid, createdAt: Date.now(), ticketId: activeTicketId },
+                  'fact',
+                  'personal',
+                  user.uid,
+                  token
+                );
+              }
+            })
+            .catch((err: any) => console.error("Transcript save error:", err));
+
+          // 2. Clear UI state
+          setActiveTicketId(null);
+          setAiSynthesis("Destek talebiniz başarıyla çözüldü ve sistem hafızasına kaydedildi.");
+        }
+      }
+    });
+
+    // Listen to messages
+    const q = query(
+      collection(db, `saule_support_tickets/${activeTicketId}/messages`),
+      orderBy('createdAt', 'asc')
+    );
+    const unsubMessages = onSnapshot(q, (snapshot: any) => {
+      const msgs: any[] = [];
+      snapshot.forEach((d: any) => msgs.push({ id: d.id, ...d.data() }));
+      setLiveMessages(msgs);
+    });
+
+    return () => {
+      unsubTicket();
+      unsubMessages();
+    };
+  }, [activeTicketId]);
 
   // Read URL query parameter
   useEffect(() => {
@@ -246,6 +314,24 @@ export default function AppClient({ dict }: { dict: any }) {
     }
     const currentQuery = overrideQuery || query;
     if (!currentQuery.trim()) return;
+
+    if (activeTicketId) {
+      // Live Support Mode: Send message to Firestore ticket instead of Gemini
+      setQuery('');
+      try {
+        const { addDoc, collection, serverTimestamp } = require('firebase/firestore');
+        await addDoc(collection(db, `saule_support_tickets/${activeTicketId}/messages`), {
+          text: currentQuery.trim(),
+          sender: 'user',
+          senderId: user?.uid || 'unknown',
+          senderName: user?.displayName || user?.email || 'Müşteri',
+          createdAt: serverTimestamp()
+        });
+      } catch (err) {
+        console.error("Error sending live support message:", err);
+      }
+      return;
+    }
     
     setIsSearching(true);
     setAiResponse(null);
@@ -462,7 +548,44 @@ export default function AppClient({ dict }: { dict: any }) {
           activeWorkspace: activeWorkspace
         })
       }).then(res => res.json())
-        .then(data => {
+        .then(async data => {
+          if (data.answer && data.answer.includes('[ESCALATE_TO_HUMAN]')) {
+             try {
+               const { addDoc, collection, serverTimestamp } = require('firebase/firestore');
+               
+               let contextData = null;
+               try {
+                 if (activeContextString) {
+                   contextData = JSON.parse(activeContextString);
+                 }
+               } catch (e) { console.error("Context parse error", e); }
+
+               const docRef = await addDoc(collection(db, 'saule_support_tickets'), {
+                 userId: user?.uid || 'unknown',
+                 userEmail: user?.email || 'Bilinmiyor',
+                 status: 'open',
+                 source: 'beiwe_os',
+                 createdAt: Date.now(),
+                 updatedAt: serverTimestamp(),
+                 ticketNumber: `TKT-${Math.floor(Math.random() * 900000) + 100000}`,
+                 contextSnapshot: contextData,
+                 preHandoffHistory: [
+                   ...chatHistory.slice(-5),
+                   { role: 'user', content: currentQuery }
+                 ]
+               });
+               
+               setActiveTicketId(docRef.id);
+               setAiResponse("Müşteri destek ekibine aktarılıyorsunuz. Lütfen bekleyin...");
+               setIsGenerating(false);
+             } catch (err) {
+               console.error("Failed to escalate to human", err);
+               setAiResponse("Destek ekibine aktarılırken bir hata oluştu.");
+               setIsGenerating(false);
+             }
+             return;
+          }
+
           if (data.answer) setAiResponse(data.answer);
           
           // Konuşma geçmişini güncelle
@@ -1049,7 +1172,7 @@ export default function AppClient({ dict }: { dict: any }) {
 
         {/* Results Area */}
         <AnimatePresence>
-          {isSearching && results && (
+          {((isSearching && results) || activeTicketId) && (
             <motion.div 
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1057,18 +1180,56 @@ export default function AppClient({ dict }: { dict: any }) {
               className="w-full max-w-3xl flex flex-col pb-24"
             >
               <div className="flex flex-col gap-6 mb-8 mt-4">
-                {/* Unified AI Response Section at the Top */}
-                {(aiResponse || aiSynthesis || isGenerating) && (
+                
+                {activeTicketId ? (
+                  <section className="mb-8">
+                    <div className="bg-white rounded-3xl border border-blue-500/30 shadow-sm relative overflow-hidden flex flex-col h-[500px]">
+                      <div className="bg-blue-50/50 p-4 border-b border-blue-100 flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                          <span className="font-bold text-blue-900">Müşteri Destek Merkezi (Canlı)</span>
+                        </div>
+                        <span className="text-xs text-blue-600/70 font-mono">{activeTicketId}</span>
+                      </div>
+                      
+                      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                        {liveMessages.length === 0 ? (
+                          <div className="h-full flex items-center justify-center text-sm text-slate-400 italic">
+                            Destek ekibine bağlanılıyor, lütfen bekleyin...
+                          </div>
+                        ) : (
+                          liveMessages.map(msg => {
+                            const isUser = msg.sender === 'user';
+                            return (
+                              <div key={msg.id} className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm ${
+                                  isUser 
+                                    ? 'bg-[var(--color-burnt-orange)] text-white rounded-br-sm' 
+                                    : 'bg-blue-500 text-white rounded-bl-sm'
+                                }`}>
+                                  {!isUser && <p className="text-[10px] font-bold text-blue-200 mb-1">{msg.senderName || 'Destek'}</p>}
+                                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                ) : (
+                /* Unified AI Response Section at the Top */
+                (aiResponse || aiSynthesis || isGenerating) && (
                   <section className="mb-8">
                     <div className="bg-white rounded-3xl border border-[var(--color-burnt-orange)]/30 shadow-sm relative overflow-hidden">
                       {/* Decorative Background */}
                       <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-[var(--color-burnt-orange)]/10 to-transparent rounded-bl-full pointer-events-none" />
                       
                       {/* Clarity Score Background Indicator (Subtle) */}
-                      {results.context.score > 0 && (
+                      {(results?.context?.score ?? 0) > 0 && (
                         <div className="absolute top-4 right-6 flex items-center gap-2 text-[var(--color-ink)]/30">
                           <div className="text-[10px] font-bold tracking-widest uppercase">Netlik</div>
-                          <div className="font-serif text-lg font-bold">%{results.context.score}</div>
+                          <div className="font-serif text-lg font-bold">%{results?.context?.score}</div>
                         </div>
                       )}
 
@@ -1171,7 +1332,7 @@ export default function AppClient({ dict }: { dict: any }) {
                       </div>
                     </div>
                   </section>
-                )}
+                ))}
 
                 {/* Chat Input for Continuous Conversation */}
                 <div className="pt-4 mt-6 border-t border-[var(--color-ink)]/5">
@@ -1180,6 +1341,12 @@ export default function AppClient({ dict }: { dict: any }) {
                       e.preventDefault();
                       if (!questionAnswer.trim()) return;
                       
+                      if (activeTicketId) {
+                        handleSearch(undefined, questionAnswer);
+                        setQuestionAnswer('');
+                        return;
+                      }
+
                       // Hafızaya yaz
                       if (user) {
                          const token = await user.getIdToken();
@@ -1225,13 +1392,13 @@ export default function AppClient({ dict }: { dict: any }) {
 
               <div className={`space-y-10 ${tabs.length > 0 ? 'hidden' : ''}`}>
                 {/* 2. Collective Results */}
-                {results.collectiveResults.length > 0 && (
+                {(results?.collectiveResults?.length ?? 0) > 0 && (
                   <section className="space-y-4">
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="font-serif font-bold text-sm tracking-widest text-[var(--color-ink-light)]">{dict.collective_results}</h3>
                     </div>
                     
-                    {results.collectiveResults.map(item => (
+                    {results?.collectiveResults?.map(item => (
                       <div key={item.id} className="bg-white p-6 rounded-2xl border border-[var(--color-ink)]/10 shadow-sm relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-[var(--color-consensus)]/10 to-transparent rounded-bl-full pointer-events-none" />
                         
@@ -1272,7 +1439,7 @@ export default function AppClient({ dict }: { dict: any }) {
                 )}
 
                 {/* 3. Registered Products */}
-                {results.registeredProducts.length > 0 && (
+                {(results?.registeredProducts?.length ?? 0) > 0 && (
                   <section className="space-y-4">
                     <div className="flex justify-between items-center mb-4">
                       <div className="space-y-0.5">
@@ -1281,7 +1448,7 @@ export default function AppClient({ dict }: { dict: any }) {
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
-                      {results.registeredProducts.map(item => (
+                      {results?.registeredProducts?.map(item => (
                         <div key={item.id} className="bg-white p-4 rounded-xl border border-[var(--color-ink)]/10 shadow-sm flex flex-col">
                           <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase mb-2">
                             <div className="w-3 h-3 bg-blue-500 rounded-sm"></div> {item.brand}
@@ -1311,6 +1478,15 @@ export default function AppClient({ dict }: { dict: any }) {
                 
               </div>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── GÜNLÜK PANEL (BUGÜN) ─────────────────────────────────────────
+            Hiç sekme açık değilse (tabs.length === 0) gösterilir.
+        ──────────────────────────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {tabs.length === 0 && !isSearching && !results && (
+            <DailyPanel dict={dict} openTab={openTab} />
           )}
         </AnimatePresence>
 
