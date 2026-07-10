@@ -29,6 +29,7 @@ export default function CustomersClient({ dict }: { dict: any }) {
   const [contactsError, setContactsError] = useState<string | null>(null);
 
   const tComingSoon = dict?.common?.coming_soon || 'Yakında';
+
   const fetchCustomers = async () => {
     if (!user) return;
     try {
