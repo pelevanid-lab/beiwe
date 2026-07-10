@@ -1,11 +1,20 @@
 'use client';
 
 import React from 'react';
-import { Link2, MessageCircle, Mail, Calendar as CalendarIcon, Check, Plus, AlertCircle, RefreshCw, Camera, FileText, ChevronRight } from 'lucide-react';
+import { Link2, MessageCircle, Mail, Calendar as CalendarIcon, Check, Plus, AlertCircle, RefreshCw, Camera, FileText, ChevronRight, Inbox } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 
 const availableIntegrations = [
+  {
+    id: 'inbox',
+    name: 'İletişim Merkezi',
+    description: 'Tüm iletişim kanallarınızı ve müşteri mesajlarınızı tek bir merkezden yönetin.',
+    icon: Inbox,
+    color: 'text-[var(--color-burnt-orange)]',
+    bgColor: 'bg-[var(--color-burnt-orange)]/10',
+    status: 'coming_soon',
+  },
   {
     id: 'whatsapp',
     name: 'WhatsApp Business',

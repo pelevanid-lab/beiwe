@@ -69,7 +69,6 @@ export default function Sidebar({ dict }: { dict?: any }) {
       
       <nav className="flex-1 flex flex-col items-center gap-6 w-full">
         {/* CRM Alanı */}
-        <SidebarItem icon={Inbox} label={dict?.nav_inbox || "Gelen Kutusu"} href={`/${locale}/app/inbox`} active={isActive('/inbox')} disabled={true} badge={tComingSoon} />
         <SidebarItem icon={FileText} label={dict?.nav_docs || "Dokümanlar"} href={`/${locale}/app/docs`} active={isActive('/docs')} />
         <SidebarItem icon={Users} label={dict?.nav_customers || "Müşteriler"} href={`/${locale}/app/customers`} active={isActive('/customers')} />
         <SidebarItem icon={Calendar} label={dict?.nav_appointments || "Randevular"} href={`/${locale}/app/appointments`} active={isActive('/appointments')} />
